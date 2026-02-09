@@ -1,4 +1,5 @@
 import type tslib from "typescript/lib/tsserverlibrary";
+
 import { createGetCompletionsAtPosition } from "./completions.js";
 import { createGetSemanticDiagnostics } from "./diagnostics.js";
 import { createGetQuickInfoAtPosition } from "./quickinfo.js";
@@ -27,4 +28,5 @@ function init(modules: { typescript: typeof tslib }) {
   return { create };
 }
 
+// @ts-expect-error TS1203: export = is required for tsserver plugins (CJS), but our tsconfig targets ESM. tsup handles the actual build.
 export = init;

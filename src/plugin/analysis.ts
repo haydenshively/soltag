@@ -174,10 +174,10 @@ function findNodeAtPosition(ts: typeof tslib, sourceFile: tslib.SourceFile, posi
 /**
  * Walk up the AST to find an ancestor matching a predicate.
  */
-function findAncestor(
+function findAncestor<T extends tslib.Node>(
   node: tslib.Node,
-  predicate: (node: tslib.Node) => boolean,
-): tslib.Node | undefined {
+  predicate: (node: tslib.Node) => node is T,
+): T | undefined {
   let current: tslib.Node | undefined = node;
   while (current) {
     if (predicate(current)) return current;

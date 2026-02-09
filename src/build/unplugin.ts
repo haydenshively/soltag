@@ -1,9 +1,10 @@
-import { createUnplugin } from "unplugin";
 import MagicString from "magic-string";
 import ts from "typescript";
+import { createUnplugin } from "unplugin";
+
 import { compile, hashSource } from "../runtime/compiler.js";
 
-export interface TsSolPluginOptions {
+export interface SoltagPluginOptions {
   /** Extra file extensions to include. Defaults to ['.ts', '.tsx', '.mts', '.cts'] */
   include?: string[];
   /** Patterns to exclude. Defaults to [/node_modules/] */
@@ -127,7 +128,7 @@ export function transformSolTemplates(
   };
 }
 
-export const unplugin = createUnplugin((options?: TsSolPluginOptions) => {
+export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
   const include = options?.include ?? [".ts", ".tsx", ".mts", ".cts"];
   const exclude = options?.exclude ?? [/node_modules/];
 

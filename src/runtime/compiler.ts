@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
+
 import { type Abi, type Hex, keccak256, toHex } from "viem";
-import { type SolcModule, buildSolcInput, type SolcStandardOutput, type SolcError } from "../solc.js";
+
+import { buildSolcInput, type SolcError, type SolcModule, type SolcStandardOutput } from "../solc.js";
 
 const require = createRequire(import.meta.url);
 

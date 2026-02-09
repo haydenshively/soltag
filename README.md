@@ -59,19 +59,19 @@ Compiles `sol` templates at build time — `solc` is only needed during the buil
 
 ```ts
 // vite.config.ts
-import tsSol from 'soltag/vite';
+import soltag from 'soltag/vite';
 
 export default defineConfig({
-  plugins: [tsSol()],
+  plugins: [soltag()],
 });
 ```
 
 Also available for other bundlers:
 
 ```ts
-import tsSol from 'soltag/rollup';
-import tsSol from 'soltag/esbuild';
-import tsSol from 'soltag/webpack';
+import soltag from 'soltag/rollup';
+import soltag from 'soltag/esbuild';
+import soltag from 'soltag/webpack';
 ```
 
 ### TypeScript Plugin (IDE support)

@@ -1,6 +1,13 @@
 import type tslib from "typescript/lib/tsserverlibrary";
-import { getCallSiteAtPosition, getArgumentIndex } from "./analysis.js";
-import { compileCached, getCallableFunctionNames, findFunctionAbi, type SolcAbiParam, type SolcStandardOutput } from "./solc-cache.js";
+
+import { getArgumentIndex, getCallSiteAtPosition } from "./analysis.js";
+import {
+  compileCached,
+  findFunctionAbi,
+  getCallableFunctionNames,
+  type SolcAbiParam,
+  type SolcStandardOutput,
+} from "./solc-cache.js";
 
 /**
  * Map a Solidity type to a TypeScript type string for display.

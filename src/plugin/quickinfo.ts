@@ -1,7 +1,14 @@
 import type tslib from "typescript/lib/tsserverlibrary";
-import { getCallSiteAtPosition, findSolTemplateLiterals } from "./analysis.js";
-import { compileCached, findFunctionAbi, extractAllAbis, type SolcAbiParam, type SolcStandardOutput } from "./solc-cache.js";
-import { solidityTypeToTs, formatReturnType } from "./completions.js";
+
+import { findSolTemplateLiterals, getCallSiteAtPosition } from "./analysis.js";
+import { formatReturnType, solidityTypeToTs } from "./completions.js";
+import {
+  compileCached,
+  extractAllAbis,
+  findFunctionAbi,
+  type SolcAbiParam,
+  type SolcStandardOutput,
+} from "./solc-cache.js";
 
 function formatParamTs(param: SolcAbiParam): string {
   return `${param.name || "_"}: ${solidityTypeToTs(param)}`;

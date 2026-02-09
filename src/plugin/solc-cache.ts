@@ -5,11 +5,11 @@
  * (no hashing needed in the plugin environment).
  */
 import {
-  type SolcModule,
   buildSolcInput,
-  type SolcStandardOutput,
   type SolcAbiItem,
   type SolcAbiParam,
+  type SolcModule,
+  type SolcStandardOutput,
 } from "../solc.js";
 
 export type { SolcAbiItem, SolcAbiParam, SolcStandardOutput };
