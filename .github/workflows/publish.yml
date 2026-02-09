@@ -31,12 +31,13 @@ jobs:
       - name: Test
         run: pnpm test
 
-  npm-release:
+  release:
     needs: check
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -81,10 +82,7 @@ jobs:
       - name: Publish to NPM
         if: ${{ steps.read-local-version.outputs.version != steps.read-npm-version.outputs.version }}
         run: |
-          pnpm config set //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-          pnpm publish ${{ steps.pack.outputs.tarball }} --registry https://registry.npmjs.org --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          pnpm publish ${{ steps.pack.outputs.tarball }} --provenance --no-git-checks
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
