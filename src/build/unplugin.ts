@@ -154,11 +154,12 @@ export function transformSolTemplates(
 
         const artifacts = compile(soliditySource);
 
-        // Collect named entries for .d.ts generation
+        // Collect named entries for .d.ts generation (only the named contract's functions)
         if (contractName != null && namedEntries != null) {
-          const functions = Object.values(artifacts).flatMap((c) =>
-            extractCallableFunctions(c.abi as unknown as Record<string, unknown>[]),
-          );
+          const contractArtifact = artifacts[contractName];
+          const functions = contractArtifact
+            ? extractCallableFunctions(contractArtifact.abi as unknown as Record<string, unknown>[])
+            : [];
           namedEntries.set(`${contractName}\0${soliditySource}`, {
             contractName,
             functions,

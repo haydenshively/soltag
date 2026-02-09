@@ -5,7 +5,7 @@ import type tslib from "typescript/lib/tsserverlibrary";
 
 import { findSolTemplateLiterals } from "./analysis.js";
 import { type ContractTypeEntry, type FunctionOverload, generateDeclarationContent } from "./codegen.js";
-import { compileCached, findFunctionAbi, getCallableFunctionNames, type SolcStandardOutput } from "./solc-cache.js";
+import { compileCached, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
 
 const TYPES_DIR = ".soltag";
 const TYPES_FILE = "types.d.ts";
@@ -67,17 +67,22 @@ export function compileEntries(rawEntries: RawSolEntry[]): ContractTypeEntry[] {
       continue;
     }
 
-    const functionNames = getCallableFunctionNames(output);
-    const functions: FunctionOverload[] = [];
+    const abi = getContractAbi(output, raw.contractName);
+    if (!abi) continue;
 
-    for (const fnName of functionNames) {
-      const fnAbi = findFunctionAbi(output, fnName);
-      if (!fnAbi) continue;
-      functions.push({
-        name: fnName,
-        inputs: fnAbi.inputs ?? [],
-        outputs: fnAbi.outputs ?? [],
-      });
+    const functions: FunctionOverload[] = [];
+    for (const item of abi) {
+      if (
+        item.type === "function" &&
+        (item.stateMutability === "view" || item.stateMutability === "pure") &&
+        item.name
+      ) {
+        functions.push({
+          name: item.name,
+          inputs: item.inputs ?? [],
+          outputs: item.outputs ?? [],
+        });
+      }
     }
 
     entries.push({ contractName: raw.contractName, functions });

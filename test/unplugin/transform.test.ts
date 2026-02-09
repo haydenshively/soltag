@@ -237,6 +237,32 @@ const contract = sol("Greeter")\`
     expect(entry.functions[0].name).toBe("greet");
   });
 
+  it("only collects functions from the named contract, not other contracts in the source", () => {
+    const entries = new Map<string, ContractTypeEntry>();
+    const input = `
+const contract = sol("Lens")\`
+  // SPDX-License-Identifier: MIT
+  pragma solidity ^0.8.24;
+  interface IERC20 {
+    function balanceOf(address) external view returns (uint256);
+  }
+  contract Lens {
+    function getBalance(address token, address user) external view returns (uint256) {
+      return IERC20(token).balanceOf(user);
+    }
+  }
+\`;
+`;
+    transformSolTemplates(input, "test.ts", entries);
+
+    expect(entries.size).toBe(1);
+    const entry = Array.from(entries.values())[0];
+    expect(entry.contractName).toBe("Lens");
+    // Should only have Lens's function, not IERC20's balanceOf
+    expect(entry.functions).toHaveLength(1);
+    expect(entry.functions[0].name).toBe("getBalance");
+  });
+
   it("does not collect unnamed entries", () => {
     const entries = new Map<string, ContractTypeEntry>();
     const input = `const contract = sol\`

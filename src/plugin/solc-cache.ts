@@ -66,3 +66,16 @@ export function getCallableFunctionNames(output: SolcStandardOutput): string[] {
 export function findFunctionAbi(output: SolcStandardOutput, functionName: string): SolcAbiItem | undefined {
   return extractAllAbis(output).find((item) => item.type === "function" && item.name === functionName);
 }
+
+/**
+ * Get the ABI for a specific contract by name.
+ */
+export function getContractAbi(output: SolcStandardOutput, contractName: string): SolcAbiItem[] | undefined {
+  if (!output.contracts) return undefined;
+  for (const fileContracts of Object.values(output.contracts)) {
+    if (contractName in fileContracts) {
+      return fileContracts[contractName].abi;
+    }
+  }
+  return undefined;
+}
