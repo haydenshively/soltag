@@ -18,7 +18,8 @@
       "import": "./dist/index.js"
     },
     "./plugin": {
-      "require": "./dist/plugin.cjs"
+      "require": "./dist/plugin.cjs",
+      "default": "./dist/plugin.cjs"
     },
     "./unplugin": {
       "types": "./dist/unplugin.d.ts",
@@ -45,7 +46,7 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "plugin.js"
+    "plugin"
   ],
   "scripts": {
     "format": "pnpm exec biome format --write",
