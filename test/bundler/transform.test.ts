@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { transformSolTemplates } from "../../src/build/unplugin.js";
-import type { ContractTypeEntry } from "../../src/plugin/codegen.js";
+import { describe, expect, it } from "vitest";
+
+import { transformSolTemplates } from "../../src/bundler/unplugin.js";
+import type { ContractTypeEntry } from "../../src/codegen.js";
 
 describe("unplugin transform", () => {
   it("returns undefined for files without sol", () => {

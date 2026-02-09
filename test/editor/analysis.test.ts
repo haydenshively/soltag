@@ -1,12 +1,13 @@
-import { describe, it, expect } from "vitest";
 import ts from "typescript";
+import { describe, expect, it } from "vitest";
+
 import {
   findSolTemplateLiterals,
-  traceToSolLiteral,
-  getCallSiteAtPosition,
   getArgumentIndex,
+  getCallSiteAtPosition,
   isSolTag,
-} from "../../src/plugin/analysis.js";
+  traceToSolLiteral,
+} from "../../src/editor/analysis.js";
 
 function createSourceFile(code: string): ts.SourceFile {
   return ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);

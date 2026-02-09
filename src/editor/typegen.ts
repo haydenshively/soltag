@@ -3,18 +3,22 @@ import * as path from "path";
 
 import type tslib from "typescript/lib/tsserverlibrary";
 
-import { findSolTemplateLiterals } from "./analysis.js";
-import { type ContractTypeEntry, type FunctionOverload, generateDeclarationContent } from "./codegen.js";
-import { compileCached, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
+import {
+  type ContractTypeEntry,
+  type FunctionOverload,
+  generateDeclarationContent,
+  SOLTAG_DIR,
+  SOLTAG_TYPES_FILE,
+} from "../codegen.js";
 
-const TYPES_DIR = ".soltag";
-const TYPES_FILE = "types.d.ts";
+import { findSolTemplateLiterals } from "./analysis.js";
+import { compileCached, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
 
 /**
  * Get the path to the generated types file for a project directory.
  */
 export function getTypesFilePath(projectDirectory: string): string {
-  return path.join(projectDirectory, TYPES_DIR, TYPES_FILE);
+  return path.join(projectDirectory, SOLTAG_DIR, SOLTAG_TYPES_FILE);
 }
 
 export interface RawSolEntry {

@@ -10,11 +10,11 @@ import {
 } from "viem";
 
 /**
- * Derive a deterministic address from a source hash.
+ * Derive a deterministic address from a hash.
  * Takes the first 20 bytes of the keccak256 hash.
  */
-export function deriveAddress(sourceHash: Hex): Hex {
-  return getAddress(slice(keccak256(sourceHash), 0, 20));
+export function deriveAddress(hash: Hex): Hex {
+  return getAddress(slice(keccak256(hash), 0, 20));
 }
 
 /**

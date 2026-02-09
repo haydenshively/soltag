@@ -19,7 +19,13 @@ let solcInstance: SolcModule | undefined;
 
 function getSolc(): SolcModule {
   if (!solcInstance) {
-    solcInstance = require("solc") as SolcModule;
+    try {
+      solcInstance = require("solc") as SolcModule;
+    } catch {
+      throw new Error(
+        "soltag: solc is not installed. Install it (`pnpm add solc`) for IDE features like completions and diagnostics.",
+      );
+    }
   }
   return solcInstance;
 }

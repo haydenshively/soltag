@@ -1,7 +1,8 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
+import { formatReturnType, solidityTypeToTs } from "../codegen.js";
+
 import { findSolTemplateLiterals, getCallSiteAtPosition } from "./analysis.js";
-import { formatReturnType, solidityTypeToTs } from "./codegen.js";
 import {
   compileCached,
   extractAllAbis,

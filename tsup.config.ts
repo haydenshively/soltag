@@ -9,17 +9,17 @@ export default defineConfig([
     clean: true,
   },
   {
-    entry: { plugin: 'src/plugin/index.ts' },
+    entry: { plugin: 'src/editor/index.ts' },
     format: ['cjs'],
     sourcemap: true,
   },
   {
     entry: {
-      unplugin: 'src/build/unplugin.ts',
-      vite: 'src/build/vite.ts',
-      rollup: 'src/build/rollup.ts',
-      esbuild: 'src/build/esbuild.ts',
-      webpack: 'src/build/webpack.ts',
+      unplugin: 'src/bundler/unplugin.ts',
+      vite: 'src/bundler/vite.ts',
+      rollup: 'src/bundler/rollup.ts',
+      esbuild: 'src/bundler/esbuild.ts',
+      webpack: 'src/bundler/webpack.ts',
     },
     format: ['esm'],
     dts: true,

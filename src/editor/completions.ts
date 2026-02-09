@@ -1,7 +1,8 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
+import { formatReturnType } from "../codegen.js";
+
 import { getArgumentIndex, getCallSiteAtPosition } from "./analysis.js";
-import { formatReturnType } from "./codegen.js";
 import { compileCached, findFunctionAbi, getCallableFunctionNames, type SolcStandardOutput } from "./solc-cache.js";
 
 export function createGetCompletionsAtPosition(
@@ -35,7 +36,7 @@ export function createGetCompletionsAtPosition(
       const functionNames = getCallableFunctionNames(output);
 
       const entries: tslib.CompletionEntry[] = functionNames.map((name) => {
-        const fnAbi = findFunctionAbi(output!, name);
+        const fnAbi = findFunctionAbi(output, name);
         const returnType = fnAbi?.outputs ? formatReturnType(fnAbi.outputs) : "unknown";
         const params = fnAbi?.inputs?.map((p) => `${p.name || "_"}: ${p.type}`).join(", ");
 

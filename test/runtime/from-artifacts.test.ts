@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { SolContract } from "../../src/runtime/contract.js";
+import { describe, expect, it } from "vitest";
+
 import { compile, hashArtifacts } from "../../src/runtime/compiler.js";
+import { SolContract } from "../../src/runtime/contract.js";
 import { deriveAddress } from "../../src/runtime/execution.js";
 
 const SOURCE = `

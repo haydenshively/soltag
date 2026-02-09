@@ -60,7 +60,7 @@
     "magic-string": "^0.30.0",
     "solc": "^0.8.0",
     "typescript": ">=5.0",
-    "unplugin": "^2.0.0",
+    "unplugin": "^3.0.0",
     "viem": "^2.0.0"
   },
   "peerDependenciesMeta": {
@@ -84,7 +84,7 @@
     "solc": "^0.8.28",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
-    "unplugin": "^2.0.0",
+    "unplugin": "^3.0.0",
     "viem": "^2.0.0",
     "vitest": "^3.0.0"
   },

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { sol, SolContract, SolCompilationError } from "../src/index.js";
+import { describe, expect, it } from "vitest";
+
+import { SolCompilationError, SolContract, sol } from "../src/index.js";
 
 describe("sol tagged template", () => {
   it("returns a SolContract", () => {

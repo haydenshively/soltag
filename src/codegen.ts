@@ -1,4 +1,7 @@
-import type { SolcAbiParam } from "../solc.js";
+import type { SolcAbiParam } from "./solc.js";
+
+export const SOLTAG_DIR = ".soltag";
+export const SOLTAG_TYPES_FILE = "types.d.ts";
 
 /**
  * Map a Solidity type to a TypeScript type string for display.

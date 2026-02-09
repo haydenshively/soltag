@@ -18,6 +18,9 @@ export interface SolLiteralInfo {
  * Recognizes both `sol` (identifier) and `sol("Name")` (call expression with string literal arg).
  * Returns the contract name for the factory form, or undefined for the plain form.
  * Returns false if the tag is not a sol tag.
+ *
+ * NOTE: This detection logic is mirrored in bundler/unplugin.ts for the build plugin,
+ * which uses `typescript` directly instead of `tsserverlibrary`.
  */
 export function isSolTag(ts: typeof tslib, tag: tslib.Node): { contractName: string | undefined } | false {
   // Plain form: sol`...`

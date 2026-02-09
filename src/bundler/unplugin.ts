@@ -5,7 +5,13 @@ import MagicString from "magic-string";
 import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
-import { type ContractTypeEntry, type FunctionOverload, generateDeclarationContent } from "../plugin/codegen.js";
+import {
+  type ContractTypeEntry,
+  type FunctionOverload,
+  generateDeclarationContent,
+  SOLTAG_DIR,
+  SOLTAG_TYPES_FILE,
+} from "../codegen.js";
 import { compile } from "../runtime/compiler.js";
 import type { SolcAbiParam } from "../solc.js";
 
@@ -130,6 +136,9 @@ export function transformSolTemplates(
       let contractName: string | undefined;
       let isSol = false;
 
+      // NOTE: This detection logic mirrors editor/analysis.ts `isSolTag()`.
+      // It's duplicated here because the build plugin uses the `typescript`
+      // package directly, while the tsserver plugin uses `tsserverlibrary`.
       if (ts.isIdentifier(node.tag) && node.tag.text === "sol") {
         // Plain form: sol`...`
         isSol = true;
@@ -189,9 +198,6 @@ export function transformSolTemplates(
   };
 }
 
-const TYPES_DIR = ".soltag";
-const TYPES_FILE = "types.d.ts";
-
 export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
   const include = options?.include ?? [".ts", ".tsx", ".mts", ".cts"];
   const exclude = options?.exclude ?? [/node_modules/];
@@ -213,16 +219,19 @@ export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
       namedEntries.clear();
     },
 
-    transformInclude(id: string) {
-      if (exclude.some((e) => e.test(id))) return false;
-      return include.some((ext) => id.endsWith(ext));
-    },
-
-    transform(code: string, id: string) {
-      if (!rootDir) {
-        rootDir = process.cwd();
-      }
-      return transformSolTemplates(code, id, namedEntries);
+    transform: {
+      filter: {
+        id: {
+          include: include.map((ext) => new RegExp(`${ext.replace(".", "\\.")}$`)),
+          exclude,
+        },
+      },
+      handler(code: string, id: string) {
+        if (!rootDir) {
+          rootDir = process.cwd();
+        }
+        return transformSolTemplates(code, id, namedEntries);
+      },
     },
 
     buildEnd() {
@@ -233,8 +242,8 @@ export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
 
       if (content === "") return;
 
-      const typesDir = path.join(rootDir, TYPES_DIR);
-      const typesFile = path.join(typesDir, TYPES_FILE);
+      const typesDir = path.join(rootDir, SOLTAG_DIR);
+      const typesFile = path.join(typesDir, SOLTAG_TYPES_FILE);
 
       if (!fs.existsSync(typesDir)) {
         fs.mkdirSync(typesDir, { recursive: true });

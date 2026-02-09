@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { generateDeclarationContent, type ContractTypeEntry } from "../../src/plugin/codegen.js";
+import { describe, expect, it } from "vitest";
+
+import { type ContractTypeEntry, generateDeclarationContent } from "../../src/codegen.js";
 
 const LENS_ENTRY: ContractTypeEntry = {
   contractName: "Lens",
@@ -71,9 +72,7 @@ describe("codegen", () => {
     });
 
     it("returns empty for entries with no functions", () => {
-      const { content } = generateDeclarationContent([
-        { contractName: "Empty", functions: [] },
-      ]);
+      const { content } = generateDeclarationContent([{ contractName: "Empty", functions: [] }]);
       expect(content).toBe("");
     });
 

@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+
 import { compile, hashSource, SolCompilationError } from "../../src/runtime/compiler.js";
 
 describe("compiler", () => {
