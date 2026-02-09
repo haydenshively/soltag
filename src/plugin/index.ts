@@ -35,10 +35,7 @@ function init(modules: { typescript: typeof tslib }) {
     return proxy;
   }
 
-  function getExternalFiles(
-    _project: tslib.server.Project,
-    _updateLevel: tslib.ProgramUpdateLevel,
-  ): string[] {
+  function getExternalFiles(_project: tslib.server.Project, _updateLevel: tslib.ProgramUpdateLevel): string[] {
     if (!pluginInfo) return [];
 
     regenerateTypesFile(ts, pluginInfo, projectDirectory);

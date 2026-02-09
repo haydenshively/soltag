@@ -19,10 +19,7 @@ export interface SolLiteralInfo {
  * Returns the contract name for the factory form, or undefined for the plain form.
  * Returns false if the tag is not a sol tag.
  */
-export function isSolTag(
-  ts: typeof tslib,
-  tag: tslib.Node,
-): { contractName: string | undefined } | false {
+export function isSolTag(ts: typeof tslib, tag: tslib.Node): { contractName: string | undefined } | false {
   // Plain form: sol`...`
   if (ts.isIdentifier(tag) && tag.text === "sol") {
     return { contractName: undefined };

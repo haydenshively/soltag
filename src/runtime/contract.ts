@@ -1,8 +1,9 @@
-import { type Abi, type Hex, keccak256, type PublicClient, toHex } from "viem";
+import type { Abi, Hex, PublicClient } from "viem";
 
-import { type CompilationResult, type CompiledContract, compile, hashSource } from "./compiler.js";
+import { type CompilationResult, type CompiledContract, compile, hashArtifacts } from "./compiler.js";
 import { deriveAddress, executeCall } from "./execution.js";
 
+// biome-ignore lint/correctness/noUnusedVariables: TName enables generic type narrowing via module augmentation
 export class SolContract<TName extends string = string> {
   private _source: string;
   private _compiled: CompilationResult | undefined;
@@ -16,16 +17,11 @@ export class SolContract<TName extends string = string> {
   /**
    * Create a SolContract from pre-compiled artifacts.
    * Used by the bundler plugin to bypass runtime solc compilation.
-   *
-   * @param artifacts - Pre-compiled contract artifacts (ABI + bytecode per contract name)
-   * @param sourceHash - keccak256 of the original Solidity source, for deterministic address derivation
    */
-  static fromArtifacts<T extends string = string>(artifacts: CompilationResult, sourceHash?: Hex): SolContract<T> {
+  static fromArtifacts<T extends string = string>(artifacts: CompilationResult): SolContract<T> {
     const instance = new SolContract("");
     instance._compiled = artifacts;
-    if (sourceHash) {
-      instance._address = deriveAddress(sourceHash);
-    }
+    instance._address = deriveAddress(hashArtifacts(artifacts));
     return instance as SolContract<T>;
   }
 
@@ -38,12 +34,7 @@ export class SolContract<TName extends string = string> {
 
   private getAddress(): Hex {
     if (!this._address) {
-      if (this._source) {
-        this._address = deriveAddress(hashSource(this._source));
-      } else {
-        // fromArtifacts without sourceHash — derive from artifact content
-        this._address = deriveAddress(keccak256(toHex(JSON.stringify(this._compiled))));
-      }
+      this._address = deriveAddress(hashArtifacts(this.ensureCompiled()));
     }
     return this._address;
   }

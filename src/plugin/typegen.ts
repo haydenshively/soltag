@@ -4,8 +4,8 @@ import * as path from "path";
 import type tslib from "typescript/lib/tsserverlibrary";
 
 import { findSolTemplateLiterals } from "./analysis.js";
-import { generateDeclarationContent, type ContractTypeEntry, type FunctionOverload } from "./codegen.js";
-import { compileCached, getCallableFunctionNames, findFunctionAbi } from "./solc-cache.js";
+import { type ContractTypeEntry, type FunctionOverload, generateDeclarationContent } from "./codegen.js";
+import { compileCached, findFunctionAbi, getCallableFunctionNames, type SolcStandardOutput } from "./solc-cache.js";
 
 const TYPES_DIR = ".soltag";
 const TYPES_FILE = "types.d.ts";
@@ -25,10 +25,7 @@ export interface RawSolEntry {
 /**
  * Collect all sol template entries from the project's source files.
  */
-export function collectSolEntries(
-  ts: typeof tslib,
-  info: tslib.server.PluginCreateInfo,
-): RawSolEntry[] {
+export function collectSolEntries(ts: typeof tslib, info: tslib.server.PluginCreateInfo): RawSolEntry[] {
   const program = info.languageService.getProgram();
   if (!program) return [];
 
@@ -58,14 +55,12 @@ export function collectSolEntries(
  * Filters to named entries only and extracts callable function ABIs.
  */
 export function compileEntries(rawEntries: RawSolEntry[]): ContractTypeEntry[] {
-  const named = rawEntries.filter(
-    (e): e is RawSolEntry & { contractName: string } => e.contractName != null,
-  );
+  const named = rawEntries.filter((e): e is RawSolEntry & { contractName: string } => e.contractName != null);
 
   const entries: ContractTypeEntry[] = [];
 
   for (const raw of named) {
-    let output;
+    let output: SolcStandardOutput;
     try {
       output = compileCached(raw.source);
     } catch {

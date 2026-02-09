@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 
-import { type Abi, type Hex, keccak256, toHex } from "viem";
+import { type Abi, concat, type Hex, keccak256, toHex } from "viem";
 
 import { buildSolcInput, type SolcError, type SolcModule, type SolcStandardOutput } from "../solc.js";
 
@@ -58,6 +58,17 @@ const compilationCache = new Map<string, CompilationResult>();
 
 export function hashSource(source: string): Hex {
   return keccak256(toHex(source));
+}
+
+/**
+ * Hash compiled artifacts by their deployed bytecodes.
+ * Used for deterministic address derivation — immune to source whitespace changes.
+ */
+export function hashArtifacts(artifacts: CompilationResult): Hex {
+  const bytecodes = Object.keys(artifacts)
+    .sort()
+    .map((name) => artifacts[name].deployedBytecode);
+  return keccak256(bytecodes.length > 0 ? concat(bytecodes) : "0x");
 }
 
 export function compile(source: string): CompilationResult {

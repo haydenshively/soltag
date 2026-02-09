@@ -5,8 +5,8 @@ import MagicString from "magic-string";
 import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
-import { compile, hashSource } from "../runtime/compiler.js";
-import { generateDeclarationContent, type ContractTypeEntry, type FunctionOverload } from "../plugin/codegen.js";
+import { type ContractTypeEntry, type FunctionOverload, generateDeclarationContent } from "../plugin/codegen.js";
+import { compile } from "../runtime/compiler.js";
 import type { SolcAbiParam } from "../solc.js";
 
 export interface SoltagPluginOptions {
@@ -153,7 +153,6 @@ export function transformSolTemplates(
         }
 
         const artifacts = compile(soliditySource);
-        const sourceHash = hashSource(soliditySource);
 
         // Collect named entries for .d.ts generation
         if (contractName != null && namedEntries != null) {
@@ -167,7 +166,7 @@ export function transformSolTemplates(
         }
 
         const generic = contractName != null ? `<${JSON.stringify(contractName)}>` : "";
-        const replacement = `__SolContract.fromArtifacts${generic}(${JSON.stringify(artifacts)}, "${sourceHash}")`;
+        const replacement = `__SolContract.fromArtifacts${generic}(${JSON.stringify(artifacts)})`;
         s.overwrite(node.getStart(sourceFile), node.getEnd(), replacement);
         hasReplacements = true;
         return; // Don't visit children

@@ -59,8 +59,6 @@ const contract = sol\`
     expect(result!.code).toContain('"abi"');
     // Should contain deployed bytecode
     expect(result!.code).toContain('"deployedBytecode"');
-    // Should contain source hash
-    expect(result!.code).toMatch(/"0x[0-9a-f]{64}"/);
   });
 
   it("handles multiple sol templates in one file", () => {

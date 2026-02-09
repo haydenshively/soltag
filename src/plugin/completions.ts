@@ -1,13 +1,8 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
 import { getArgumentIndex, getCallSiteAtPosition } from "./analysis.js";
-import { solidityTypeToTs, formatReturnType } from "./codegen.js";
-import {
-  compileCached,
-  findFunctionAbi,
-  getCallableFunctionNames,
-  type SolcStandardOutput,
-} from "./solc-cache.js";
+import { formatReturnType } from "./codegen.js";
+import { compileCached, findFunctionAbi, getCallableFunctionNames, type SolcStandardOutput } from "./solc-cache.js";
 
 export function createGetCompletionsAtPosition(
   ts: typeof tslib,

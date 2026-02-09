@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { SolContract } from "../../src/runtime/contract.js";
-import { compile, hashSource } from "../../src/runtime/compiler.js";
+import { compile, hashArtifacts } from "../../src/runtime/compiler.js";
 import { deriveAddress } from "../../src/runtime/execution.js";
 
 const SOURCE = `
@@ -31,13 +31,13 @@ describe("SolContract.fromArtifacts", () => {
     expect(fromArtifacts.abi).toEqual(fromSource.abi);
   });
 
-  it("accepts a sourceHash for deterministic address derivation", () => {
+  it("derives a deterministic address from compiled bytecodes", () => {
     const artifacts = compile(SOURCE);
-    const hash = hashSource(SOURCE);
-    const contract = SolContract.fromArtifacts(artifacts, hash);
+    const address = deriveAddress(hashArtifacts(artifacts));
 
-    // Should not throw when accessed
-    expect(contract.abi).toBeDefined();
+    expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    // Same artifacts always produce the same address
+    expect(deriveAddress(hashArtifacts(compile(SOURCE)))).toBe(address);
   });
 
   it("does not require solc when using fromArtifacts", () => {
@@ -49,28 +49,9 @@ describe("SolContract.fromArtifacts", () => {
     expect(contract.abi).toEqual(artifacts.Greeter.abi);
   });
 
-  it("derives the same address as the source-constructed path", () => {
-    const artifacts = compile(SOURCE);
-    const hash = hashSource(SOURCE);
-
-    const fromArtifacts = SolContract.fromArtifacts(artifacts, hash);
-    const fromSource = new SolContract(SOURCE);
-
-    // Both paths should derive the same deterministic address
-    const expectedAddress = deriveAddress(hash);
-    // Access private _address via call() setup — instead, verify the underlying math
-    // fromArtifacts with sourceHash: deriveAddress(sourceHash)
-    // fromSource: deriveAddress(hashSource(source))
-    // These should be identical since hash === hashSource(SOURCE)
-    expect(deriveAddress(hashSource(SOURCE))).toBe(expectedAddress);
-    // And fromArtifacts stored the address eagerly
-    expect(fromArtifacts).toBeDefined();
-    expect(fromSource).toBeDefined();
-  });
-
   it("throws when call() is given a nonexistent function name", async () => {
     const artifacts = compile(SOURCE);
-    const contract = SolContract.fromArtifacts(artifacts, hashSource(SOURCE));
+    const contract = SolContract.fromArtifacts(artifacts);
 
     // @ts-expect-error — `never` base signature rejects all function names; testing runtime behavior
     await expect(contract.call({} as any, "nonexistent")).rejects.toThrow(/Function "nonexistent" not found/);

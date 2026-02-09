@@ -102,10 +102,7 @@ export function generateDeclarationContent(entries: ContractTypeEntry[]): Genera
   for (const entry of unique) {
     for (const fn of entry.functions) {
       const argTypes = fn.inputs.map((p) => solidityTypeToTs(p));
-      const argsType =
-        argTypes.length === 0
-          ? "readonly []"
-          : `readonly [${argTypes.join(", ")}]`;
+      const argsType = argTypes.length === 0 ? "readonly []" : `readonly [${argTypes.join(", ")}]`;
       const returnType = formatReturnType(fn.outputs);
 
       overloads.push(
