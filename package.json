@@ -1,0 +1,90 @@
+{
+  "name": "soltag",
+  "version": "0.0.1",
+  "description": "Inline Solidity tagged template for TypeScript with IDE type inference",
+  "license": "MIT",
+  "keywords": [
+    "solidity",
+    "inline",
+    "plugin"
+  ],
+  "author": "Hayden Shively",
+  "repository": "https://github.com/haydenshively/soltag.git",
+  "homepage": "https://github.com/haydenshively/soltag",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./plugin": {
+      "require": "./dist/plugin.cjs"
+    },
+    "./unplugin": {
+      "types": "./dist/unplugin.d.ts",
+      "import": "./dist/unplugin.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./rollup": {
+      "types": "./dist/rollup.d.ts",
+      "import": "./dist/rollup.js"
+    },
+    "./esbuild": {
+      "types": "./dist/esbuild.d.ts",
+      "import": "./dist/esbuild.js"
+    },
+    "./webpack": {
+      "types": "./dist/webpack.d.ts",
+      "import": "./dist/webpack.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "plugin.js"
+  ],
+  "scripts": {
+    "format": "pnpm exec biome format --write",
+    "lint": "pnpm exec biome lint --write src",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "pnpm build"
+  },
+  "peerDependencies": {
+    "magic-string": "^0.30.0",
+    "solc": "^0.8.28",
+    "typescript": ">=5.0",
+    "unplugin": "^2.0.0",
+    "viem": ">=2.0"
+  },
+  "peerDependenciesMeta": {
+    "magic-string": {
+      "optional": true
+    },
+    "solc": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "unplugin": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.14",
+    "@types/node": "^25.2.2",
+    "magic-string": "^0.30.0",
+    "solc": "^0.8.28",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "unplugin": "^2.0.0",
+    "viem": "^2.0.0",
+    "vitest": "^3.0.0"
+  }
+}
