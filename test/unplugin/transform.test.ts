@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { transformSolTemplates } from "../../src/build/unplugin.js";
+import type { ContractTypeEntry } from "../../src/plugin/codegen.js";
 
 describe("unplugin transform", () => {
   it("returns undefined for files without sol", () => {
@@ -105,6 +106,41 @@ const b = sol\`
     expect(result).toBeUndefined();
   });
 
+  // --- Factory form tests ---
+
+  it("transforms sol('Name')` ` with generic fromArtifacts", () => {
+    const input = `
+import { sol } from 'soltag';
+const contract = sol("Greeter")\`
+  // SPDX-License-Identifier: MIT
+  pragma solidity ^0.8.24;
+  contract Greeter {
+    function greet() external pure returns (string memory) {
+      return "hello";
+    }
+  }
+\`;
+`;
+    const result = transformSolTemplates(input, "test.ts");
+
+    expect(result).toBeDefined();
+    expect(result!.code).toContain('__SolContract.fromArtifacts<"Greeter">(');
+    expect(result!.code).not.toContain("sol(");
+  });
+
+  it("preserves plain sol` ` without generic parameter", () => {
+    const input = `const contract = sol\`
+  // SPDX-License-Identifier: MIT
+  pragma solidity ^0.8.24;
+  contract A { function f() external pure returns (uint256) { return 1; } }
+\`;`;
+    const result = transformSolTemplates(input, "test.ts");
+
+    expect(result).toBeDefined();
+    expect(result!.code).toContain("__SolContract.fromArtifacts(");
+    expect(result!.code).not.toContain("fromArtifacts<");
+  });
+
   // --- Interpolation tests ---
 
   it("resolves const string interpolation at build time", () => {
@@ -177,5 +213,41 @@ const contract = sol\`
 
     // let is not const, so it can't be resolved at build time
     expect(result).toBeUndefined();
+  });
+
+  // --- Entry collection for .d.ts generation ---
+
+  it("collects named entries when namedEntries map is provided", () => {
+    const entries = new Map<string, ContractTypeEntry>();
+    const input = `
+const contract = sol("Greeter")\`
+  // SPDX-License-Identifier: MIT
+  pragma solidity ^0.8.24;
+  contract Greeter {
+    function greet() external pure returns (string memory) {
+      return "hello";
+    }
+  }
+\`;
+`;
+    transformSolTemplates(input, "test.ts", entries);
+
+    expect(entries.size).toBe(1);
+    const entry = Array.from(entries.values())[0];
+    expect(entry.contractName).toBe("Greeter");
+    expect(entry.functions.length).toBeGreaterThan(0);
+    expect(entry.functions[0].name).toBe("greet");
+  });
+
+  it("does not collect unnamed entries", () => {
+    const entries = new Map<string, ContractTypeEntry>();
+    const input = `const contract = sol\`
+  // SPDX-License-Identifier: MIT
+  pragma solidity ^0.8.24;
+  contract A { function f() external pure returns (uint256) { return 1; } }
+\`;`;
+    transformSolTemplates(input, "test.ts", entries);
+
+    expect(entries.size).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { solidityTypeToTs } from "../../src/plugin/completions.js";
+import { solidityTypeToTs } from "../../src/plugin/codegen.js";
 import type { SolcAbiParam } from "../../src/solc.js";
 
 function param(type: string, name = "", components?: SolcAbiParam[]): SolcAbiParam {

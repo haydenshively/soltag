@@ -3,6 +3,8 @@ import type tslib from "typescript/lib/tsserverlibrary";
 export interface SolLiteralInfo {
   /** Solidity source text, or undefined if the template has unresolvable interpolations */
   source: string | undefined;
+  /** Contract name from sol("Name") factory form, or undefined for plain sol`` */
+  contractName: string | undefined;
   /** Position of the template literal expression in the source file */
   pos: number;
   /** End position */
@@ -12,19 +14,51 @@ export interface SolLiteralInfo {
 }
 
 /**
+ * Check if a tag expression is a sol tag.
+ * Recognizes both `sol` (identifier) and `sol("Name")` (call expression with string literal arg).
+ * Returns the contract name for the factory form, or undefined for the plain form.
+ * Returns false if the tag is not a sol tag.
+ */
+export function isSolTag(
+  ts: typeof tslib,
+  tag: tslib.Node,
+): { contractName: string | undefined } | false {
+  // Plain form: sol`...`
+  if (ts.isIdentifier(tag) && tag.text === "sol") {
+    return { contractName: undefined };
+  }
+  // Factory form: sol("Name")`...`
+  if (
+    ts.isCallExpression(tag) &&
+    ts.isIdentifier(tag.expression) &&
+    tag.expression.text === "sol" &&
+    tag.arguments.length === 1 &&
+    ts.isStringLiteral(tag.arguments[0])
+  ) {
+    return { contractName: tag.arguments[0].text };
+  }
+  return false;
+}
+
+/**
  * Find all `sol` tagged template expressions in a source file.
+ * Recognizes both `sol`...`` and `sol("Name")`...`` forms.
  */
 export function findSolTemplateLiterals(ts: typeof tslib, sourceFile: tslib.SourceFile): SolLiteralInfo[] {
   const results: SolLiteralInfo[] = [];
 
   function visit(node: tslib.Node) {
-    if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === "sol") {
-      results.push({
-        source: extractTemplateText(ts, node.template),
-        pos: node.pos,
-        end: node.end,
-        node,
-      });
+    if (ts.isTaggedTemplateExpression(node)) {
+      const solTag = isSolTag(ts, node.tag);
+      if (solTag !== false) {
+        results.push({
+          source: extractTemplateText(ts, node.template),
+          contractName: solTag.contractName,
+          pos: node.pos,
+          end: node.end,
+          node,
+        });
+      }
     }
 
     ts.forEachChild(node, visit);
@@ -100,19 +134,19 @@ export function traceToSolLiteral(
   node: tslib.Node,
   sourceFile: tslib.SourceFile,
 ): string | undefined {
-  // Direct: sol`...`.call(...)
-  if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === "sol") {
+  // Direct: sol`...`.call(...) or sol("Name")`...`.call(...)
+  if (ts.isTaggedTemplateExpression(node) && isSolTag(ts, node.tag) !== false) {
     return extractTemplateText(ts, node.template);
   }
 
   // Variable reference: const x = sol`...`; x.call(...)
+  // or: const x = sol("Name")`...`; x.call(...)
   if (ts.isIdentifier(node)) {
     const declaration = findVariableDeclaration(ts, node, sourceFile);
     if (
       declaration?.initializer &&
       ts.isTaggedTemplateExpression(declaration.initializer) &&
-      ts.isIdentifier(declaration.initializer.tag) &&
-      declaration.initializer.tag.text === "sol"
+      isSolTag(ts, declaration.initializer.tag) !== false
     ) {
       return extractTemplateText(ts, declaration.initializer.template);
     }

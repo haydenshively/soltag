@@ -5,6 +5,7 @@ import {
   traceToSolLiteral,
   getCallSiteAtPosition,
   getArgumentIndex,
+  isSolTag,
 } from "../../src/plugin/analysis.js";
 
 function createSourceFile(code: string): ts.SourceFile {
@@ -55,6 +56,39 @@ describe("plugin analysis", () => {
       const results = findSolTemplateLiterals(ts, source);
       expect(results).toHaveLength(0);
     });
+
+    it("finds sol('Name') factory form template literal", () => {
+      const source = createSourceFile(`
+        const x = sol("Lens")\`pragma solidity ^0.8.24; contract Lens {}\`;
+      `);
+
+      const results = findSolTemplateLiterals(ts, source);
+      expect(results).toHaveLength(1);
+      expect(results[0].source).toContain("contract Lens");
+      expect(results[0].contractName).toBe("Lens");
+    });
+
+    it("sets contractName to undefined for plain sol form", () => {
+      const source = createSourceFile(`
+        const x = sol\`pragma solidity ^0.8.24; contract A {}\`;
+      `);
+
+      const results = findSolTemplateLiterals(ts, source);
+      expect(results).toHaveLength(1);
+      expect(results[0].contractName).toBeUndefined();
+    });
+
+    it("finds both plain and factory forms in the same file", () => {
+      const source = createSourceFile(`
+        const a = sol\`pragma solidity ^0.8.24; contract A {}\`;
+        const b = sol("B")\`pragma solidity ^0.8.24; contract B {}\`;
+      `);
+
+      const results = findSolTemplateLiterals(ts, source);
+      expect(results).toHaveLength(2);
+      expect(results[0].contractName).toBeUndefined();
+      expect(results[1].contractName).toBe("B");
+    });
   });
 
   describe("traceToSolLiteral", () => {
@@ -77,6 +111,30 @@ myContract.call(client, 'test');`;
       const source = createSourceFile(code);
 
       // Find the identifier 'myContract' in the .call() expression
+      let callExprObj: ts.Node | undefined;
+      function visit(node: ts.Node) {
+        if (
+          ts.isPropertyAccessExpression(node) &&
+          ts.isIdentifier(node.expression) &&
+          node.expression.text === "myContract" &&
+          node.name.text === "call"
+        ) {
+          callExprObj = node.expression;
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+
+      expect(callExprObj).toBeDefined();
+      const result = traceToSolLiteral(ts, callExprObj!, source);
+      expect(result).toContain("contract Foo");
+    });
+
+    it("traces a factory form variable reference to its sol literal", () => {
+      const code = `const myContract = sol("Foo")\`pragma solidity ^0.8.24; contract Foo {}\`;
+myContract.call(client, 'test');`;
+      const source = createSourceFile(code);
+
       let callExprObj: ts.Node | undefined;
       function visit(node: ts.Node) {
         if (

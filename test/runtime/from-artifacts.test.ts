@@ -72,6 +72,7 @@ describe("SolContract.fromArtifacts", () => {
     const artifacts = compile(SOURCE);
     const contract = SolContract.fromArtifacts(artifacts, hashSource(SOURCE));
 
+    // @ts-expect-error — `never` base signature rejects all function names; testing runtime behavior
     await expect(contract.call({} as any, "nonexistent")).rejects.toThrow(/Function "nonexistent" not found/);
   });
 });

@@ -3,7 +3,7 @@ import { type Abi, type Hex, keccak256, type PublicClient, toHex } from "viem";
 import { type CompilationResult, type CompiledContract, compile, hashSource } from "./compiler.js";
 import { deriveAddress, executeCall } from "./execution.js";
 
-export class SolContract {
+export class SolContract<TName extends string = string> {
   private _source: string;
   private _compiled: CompilationResult | undefined;
   private _address: Hex | undefined;
@@ -20,13 +20,13 @@ export class SolContract {
    * @param artifacts - Pre-compiled contract artifacts (ABI + bytecode per contract name)
    * @param sourceHash - keccak256 of the original Solidity source, for deterministic address derivation
    */
-  static fromArtifacts(artifacts: CompilationResult, sourceHash?: Hex): SolContract {
+  static fromArtifacts<T extends string = string>(artifacts: CompilationResult, sourceHash?: Hex): SolContract<T> {
     const instance = new SolContract("");
     instance._compiled = artifacts;
     if (sourceHash) {
       instance._address = deriveAddress(sourceHash);
     }
-    return instance;
+    return instance as SolContract<T>;
   }
 
   private ensureCompiled(): CompilationResult {
@@ -56,6 +56,7 @@ export class SolContract {
     return this._abi;
   }
 
+  call(client: PublicClient, functionName: never, args?: readonly unknown[]): Promise<never>;
   async call(client: PublicClient, functionName: string, args: readonly unknown[] = []): Promise<unknown> {
     const compiled = this.ensureCompiled();
     const { contract } = findContract(compiled, functionName);

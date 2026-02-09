@@ -19,7 +19,31 @@ export function createGetSemanticDiagnostics(
     const solLiterals = findSolTemplateLiterals(ts, sourceFile);
     const solDiagnostics: tslib.Diagnostic[] = [];
 
+    // Track named contracts in this file to detect same-file duplicates
+    const namedContracts = new Map<string, { source: string; pos: number; end: number }>();
+
     for (const literal of solLiterals) {
+      // Check for duplicate contract names within this file
+      if (literal.contractName != null && literal.source != null) {
+        const existing = namedContracts.get(literal.contractName);
+        if (existing && existing.source !== literal.source) {
+          solDiagnostics.push({
+            file: sourceFile,
+            start: literal.pos,
+            length: literal.end - literal.pos,
+            messageText: `Duplicate contract name "${literal.contractName}" with different Solidity source. Only the first definition will be used for type generation.`,
+            category: ts.DiagnosticCategory.Warning,
+            code: 90002,
+          });
+        } else if (!existing) {
+          namedContracts.set(literal.contractName, {
+            source: literal.source,
+            pos: literal.pos,
+            end: literal.end,
+          });
+        }
+      }
+
       if (literal.source === undefined) continue;
 
       let output: SolcStandardOutput;

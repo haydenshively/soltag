@@ -69,3 +69,35 @@ describe("sol tagged template", () => {
     expect(() => contract.abi).toThrow(SolCompilationError);
   });
 });
+
+describe("sol factory form", () => {
+  it("returns a SolContract via sol('Name')`...`", () => {
+    const contract = sol("Greeter")`
+      // SPDX-License-Identifier: MIT
+      pragma solidity ^0.8.24;
+      contract Greeter {
+        function greet() external pure returns (string memory) {
+          return "hello";
+        }
+      }
+    `;
+
+    expect(contract).toBeInstanceOf(SolContract);
+  });
+
+  it("exposes ABI from factory form", () => {
+    const contract = sol("Math")`
+      // SPDX-License-Identifier: MIT
+      pragma solidity ^0.8.24;
+      library Math {
+        function add(uint256 a, uint256 b) external pure returns (uint256) {
+          return a + b;
+        }
+      }
+    `;
+
+    const abi = contract.abi;
+    expect(abi).toBeInstanceOf(Array);
+    expect(abi.length).toBe(1);
+  });
+});
