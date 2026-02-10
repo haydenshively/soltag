@@ -3,16 +3,10 @@ import * as path from "path";
 
 import type tslib from "typescript/lib/tsserverlibrary";
 
-import {
-  type ContractTypeEntry,
-  type FunctionOverload,
-  generateDeclarationContent,
-  SOLTAG_DIR,
-  SOLTAG_TYPES_FILE,
-} from "../codegen.js";
+import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "../codegen.js";
 
 import { findSolTemplateLiterals } from "./analysis.js";
-import { compileCached, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
+import { compileCached, getConstructorInputs, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
 
 /**
  * Get the path to the generated types file for a project directory.
@@ -22,7 +16,7 @@ export function getTypesFilePath(projectDirectory: string): string {
 }
 
 export interface RawSolEntry {
-  contractName: string | undefined;
+  contractName: string;
   source: string;
 }
 
@@ -56,14 +50,12 @@ export function collectSolEntries(ts: typeof tslib, info: tslib.server.PluginCre
 
 /**
  * Compile raw sol entries into ContractTypeEntry[] for codegen.
- * Filters to named entries only and extracts callable function ABIs.
+ * Extracts constructor inputs for bytecode() overloads.
  */
 export function compileEntries(rawEntries: RawSolEntry[]): ContractTypeEntry[] {
-  const named = rawEntries.filter((e): e is RawSolEntry & { contractName: string } => e.contractName != null);
-
   const entries: ContractTypeEntry[] = [];
 
-  for (const raw of named) {
+  for (const raw of rawEntries) {
     let output: SolcStandardOutput;
     try {
       output = compileCached(raw.source);
@@ -71,25 +63,9 @@ export function compileEntries(rawEntries: RawSolEntry[]): ContractTypeEntry[] {
       continue;
     }
 
-    const abi = getContractAbi(output, raw.contractName);
-    if (!abi) continue;
-
-    const functions: FunctionOverload[] = [];
-    for (const item of abi) {
-      if (
-        item.type === "function" &&
-        (item.stateMutability === "view" || item.stateMutability === "pure") &&
-        item.name
-      ) {
-        functions.push({
-          name: item.name,
-          inputs: item.inputs ?? [],
-          outputs: item.outputs ?? [],
-        });
-      }
-    }
-
-    entries.push({ contractName: raw.contractName, functions });
+    const constructorInputs = getConstructorInputs(output, raw.contractName);
+    const abi = (getContractAbi(output, raw.contractName) ?? []) as unknown[];
+    entries.push({ contractName: raw.contractName, constructorInputs, abi });
   }
 
   return entries;

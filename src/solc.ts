@@ -10,14 +10,24 @@ export interface SolcModule {
 /**
  * Build the standard JSON input object for solc.
  */
-export function buildSolcInput(source: string) {
+export interface SolcInputOptions {
+  optimizer?: {
+    enabled?: boolean;
+    runs?: number;
+  };
+}
+
+export function buildSolcInput(source: string, options?: SolcInputOptions) {
   return {
     language: "Solidity" as const,
     sources: {
       "inline.sol": { content: source },
     },
     settings: {
-      optimizer: { enabled: true, runs: 1 },
+      optimizer: {
+        enabled: options?.optimizer?.enabled ?? true,
+        runs: options?.optimizer?.runs ?? 1,
+      },
       outputSelection: {
         "*": {
           "*": ["abi", "evm.bytecode.object", "evm.deployedBytecode.object"],

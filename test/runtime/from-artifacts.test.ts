@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { compile, hashArtifacts } from "../../src/runtime/compiler.js";
-import { SolContract } from "../../src/runtime/contract.js";
-import { deriveAddress } from "../../src/runtime/execution.js";
+import { compile } from "../../src/runtime/compiler.js";
+import { InlineContract } from "../../src/runtime/contract.js";
 
 const SOURCE = `
   // SPDX-License-Identifier: MIT
@@ -14,47 +13,65 @@ const SOURCE = `
   }
 `;
 
-describe("SolContract.fromArtifacts", () => {
-  it("creates a SolContract from pre-compiled artifacts", () => {
+describe("InlineContract.fromArtifacts", () => {
+  it("creates a InlineContract from pre-compiled artifacts", () => {
     const artifacts = compile(SOURCE);
-    const contract = SolContract.fromArtifacts(artifacts);
+    const contract = InlineContract.fromArtifacts("Greeter", artifacts);
 
-    expect(contract).toBeInstanceOf(SolContract);
+    expect(contract).toBeInstanceOf(InlineContract);
+    expect(contract.name).toBe("Greeter");
     expect(contract.abi).toBeInstanceOf(Array);
     expect(contract.abi.length).toBeGreaterThan(0);
   });
 
   it("produces the same ABI as runtime-compiled version", () => {
     const artifacts = compile(SOURCE);
-    const fromArtifacts = SolContract.fromArtifacts(artifacts);
-    const fromSource = new SolContract(SOURCE);
+    const fromArtifacts = InlineContract.fromArtifacts("Greeter", artifacts);
+    const fromSource = new InlineContract(SOURCE, "Greeter");
 
     expect(fromArtifacts.abi).toEqual(fromSource.abi);
   });
 
-  it("derives a deterministic address from compiled bytecodes", () => {
+  it("derives a deterministic address from deployedBytecode", () => {
     const artifacts = compile(SOURCE);
-    const address = deriveAddress(hashArtifacts(artifacts));
+    const contract = InlineContract.fromArtifacts("Greeter", artifacts);
 
-    expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(contract.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
     // Same artifacts always produce the same address
-    expect(deriveAddress(hashArtifacts(compile(SOURCE)))).toBe(address);
+    const contract2 = InlineContract.fromArtifacts("Greeter", compile(SOURCE));
+    expect(contract2.address).toBe(contract.address);
   });
 
   it("does not require solc when using fromArtifacts", () => {
     // fromArtifacts with pre-built data should never touch solc
     const artifacts = compile(SOURCE);
-    const contract = SolContract.fromArtifacts(artifacts);
+    const contract = InlineContract.fromArtifacts("Greeter", artifacts);
 
     // Accessing .abi should use the pre-compiled data, not trigger compile()
     expect(contract.abi).toEqual(artifacts.Greeter.abi);
   });
 
-  it("throws when call() is given a nonexistent function name", async () => {
+  it("exposes deployedBytecode", () => {
     const artifacts = compile(SOURCE);
-    const contract = SolContract.fromArtifacts(artifacts);
+    const contract = InlineContract.fromArtifacts("Greeter", artifacts);
 
-    // @ts-expect-error — `never` base signature rejects all function names; testing runtime behavior
-    await expect(contract.call({} as any, "nonexistent")).rejects.toThrow(/Function "nonexistent" not found/);
+    expect(contract.deployedBytecode).toMatch(/^0x/);
+    expect(contract.deployedBytecode).toBe(artifacts.Greeter.deployedBytecode);
+  });
+
+  it("exposes bytecode()", () => {
+    const artifacts = compile(SOURCE);
+    const contract = InlineContract.fromArtifacts("Greeter", artifacts);
+
+    const bc = contract.bytecode();
+    expect(bc).toMatch(/^0x/);
+    expect(bc).toBe(artifacts.Greeter.bytecode);
+  });
+
+  it("throws when named contract is not found in artifacts", () => {
+    const artifacts = compile(SOURCE);
+    const contract = InlineContract.fromArtifacts("NonExistent", artifacts);
+
+    expect(() => contract.abi).toThrow(/Contract "NonExistent" not found/);
   });
 });

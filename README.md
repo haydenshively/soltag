@@ -1,35 +1,35 @@
 # soltag
 
-Inline Solidity in TypeScript. Write Solidity inside a tagged template literal, get real-time IDE type inference, and execute deployless reads via `eth_call` + `stateOverride`.
+Inline Solidity in TypeScript. Write Solidity inside a tagged template literal, get a data object with typed `abi`, `bytecode()`, `deployedBytecode`, and a deterministic `address`.
 
 ```ts
 import { sol } from 'soltag';
 
-const contract = sol`
+const lens = sol("Lens")`
   pragma solidity ^0.8.24;
   interface IERC20 { function balanceOf(address) external view returns (uint256); }
-  library Lens {
-    function userBalances(address[] memory tokens, address user)
-      external view returns (uint256[] memory out)
+  contract Lens {
+    function getBalance(address token, address user)
+      external view returns (uint256)
     {
-      out = new uint256[](tokens.length);
-      for (uint256 i = 0; i < tokens.length; i++) {
-        out[i] = IERC20(tokens[i]).balanceOf(user);
-      }
+      return IERC20(token).balanceOf(user);
     }
   }
 `;
 
-const balances = await contract.call(client, 'userBalances', [[USDC, WETH], user]);
-//    ^? bigint[]                        ^? autocompletes    ^? typed args
+lens.name;             // "Lens" (typed as literal)
+lens.abi;              // precise, as-const ABI (via generated .d.ts)
+lens.address;          // `0x${string}` (deterministic, derived from deployedBytecode)
+lens.deployedBytecode; // `0x${string}` (runtime bytecode)
+lens.bytecode();       // `0x${string}` (creation bytecode)
 ```
 
 ## Features
 
-- **`sol` tagged template** — write Solidity inline, get a `SolContract` you can `.call()` against any RPC. Supports string interpolation for composing reusable fragments
-- **Real-time IDE support** — function name autocomplete, typed args, return type hover, inline Solidity diagnostics via a TypeScript Language Service Plugin (no codegen)
+- **`sol("Name")` tagged template** — write Solidity inline, get a `InlineContract` with typed ABI, bytecode, and a deterministic address. Supports string interpolation for composing reusable fragments
+- **Real-time IDE support** — inline Solidity diagnostics and contract-name validation via a TypeScript Language Service Plugin. ABI and `bytecode()` types are provided through generated `.d.ts` augmentation
 - **Build-time compilation** — bundler plugin (Vite, Rollup, esbuild, webpack) compiles Solidity at build time so `solc` (8MB WASM) never ships to production
-- **Deployless execution** — uses `eth_call` with `stateOverride` to run contract code without deploying
+- **Data-oriented** — `InlineContract` is a plain data container. Use `abi` and `bytecode` with whatever execution library you prefer (viem, ethers, etc.)
 
 ## Install
 
@@ -55,14 +55,20 @@ pnpm add -D solc unplugin magic-string
 
 ### Bundler Plugin (recommended for apps)
 
-Compiles `sol` templates at build time — `solc` is only needed during the build, not at runtime.
+Compiles `sol("Name")` templates at build time — `solc` is only needed during the build, not at runtime.
 
 ```ts
 // vite.config.ts
 import soltag from 'soltag/vite';
 
 export default defineConfig({
-  plugins: [soltag()],
+  plugins: [
+    soltag({
+      solc: {
+        optimizer: { enabled: true, runs: 200 }
+      }
+    })
+  ],
 });
 ```
 
@@ -76,7 +82,7 @@ import soltag from 'soltag/webpack';
 
 ### TypeScript Plugin (IDE support)
 
-Add to your `tsconfig.json` for autocomplete, hover types, and inline Solidity diagnostics:
+Add to your `tsconfig.json` for inline Solidity diagnostics and contract-name validation:
 
 ```json
 {
@@ -94,12 +100,8 @@ Add to your `tsconfig.json` for autocomplete, hover types, and inline Solidity d
 
 ```ts
 import { sol } from 'soltag';
-import { createPublicClient, http } from 'viem';
-import { mainnet } from 'viem/chains';
 
-const client = createPublicClient({ chain: mainnet, transport: http() });
-
-const contract = sol`
+const math = sol("Math")`
   pragma solidity ^0.8.24;
   contract Math {
     function add(uint256 a, uint256 b) external pure returns (uint256) {
@@ -108,30 +110,68 @@ const contract = sol`
   }
 `;
 
-const result = await contract.call(client, 'add', [1n, 2n]);
-// result === 3n
+math.name;             // "Math"
+math.abi;              // readonly [{ type: "function", name: "add", ... }]
+math.bytecode();       // creation bytecode
+math.deployedBytecode; // runtime bytecode
+math.address;          // deterministic address derived from deployedBytecode
 ```
 
-### Reading on-chain state
+### Constructor arguments
+
+For contracts with constructors, `bytecode()` accepts typed arguments:
 
 ```ts
-const contract = sol`
+const token = sol("MyToken")`
   pragma solidity ^0.8.24;
-  interface IERC20 {
-    function balanceOf(address) external view returns (uint256);
-    function decimals() external view returns (uint8);
-  }
-  library Lens {
-    function getBalance(address token, address user)
-      external view returns (uint256 balance, uint8 decimals)
-    {
-      balance = IERC20(token).balanceOf(user);
-      decimals = IERC20(token).decimals();
+  contract MyToken {
+    uint256 public supply;
+    constructor(uint256 _supply) {
+      supply = _supply;
     }
   }
 `;
 
-const [balance, decimals] = await contract.call(client, 'getBalance', [USDC, user]);
+token.bytecode(1000n); // creation bytecode + ABI-encoded constructor args
+```
+
+### Using with viem
+
+`InlineContract` is a data container — use its properties with any execution library. Here's an example with viem's `eth_call` + `stateOverride` for deployless reads:
+
+```ts
+import { createPublicClient, http, decodeFunctionResult, encodeFunctionData } from 'viem';
+import { mainnet } from 'viem/chains';
+import { sol } from 'soltag';
+
+const client = createPublicClient({ chain: mainnet, transport: http() });
+
+const lens = sol("Lens")`
+  pragma solidity ^0.8.24;
+  interface IERC20 { function balanceOf(address) external view returns (uint256); }
+  contract Lens {
+    function getBalance(address token, address user)
+      external view returns (uint256)
+    {
+      return IERC20(token).balanceOf(user);
+    }
+  }
+`;
+
+const data = encodeFunctionData({
+  abi: lens.abi,
+  functionName: 'getBalance',
+  args: [USDC, user],
+});
+
+const result = await client.call({
+  to: lens.address,
+  data,
+  stateOverrides: [{
+    address: lens.address,
+    code: lens.deployedBytecode,
+  }],
+});
 ```
 
 ### Composing with fragments
@@ -146,7 +186,7 @@ const IERC20 = `
   }
 `;
 
-const balanceLens = sol`
+const balanceLens = sol("BalanceLens")`
   pragma solidity ^0.8.24;
   ${IERC20}
   contract BalanceLens {
@@ -155,18 +195,6 @@ const balanceLens = sol`
     {
       balance = IERC20(token).balanceOf(user);
       decimals = IERC20(token).decimals();
-    }
-  }
-`;
-
-const allowanceLens = sol`
-  pragma solidity ^0.8.24;
-  ${IERC20}
-  contract AllowanceLens {
-    function getAllowance(address token, address owner, address spender)
-      external view returns (uint256)
-    {
-      return IERC20(token).allowance(owner, spender);
     }
   }
 `;
@@ -179,13 +207,13 @@ The bundler plugin resolves `const` string interpolations at build time, so thes
 For environments where you want full control over the compilation step:
 
 ```ts
-import { SolContract } from 'soltag';
+import { InlineContract } from 'soltag';
 
-const contract = SolContract.fromArtifacts({
+const contract = InlineContract.fromArtifacts("MyContract", {
   MyContract: {
     abi: [/* ... */],
     deployedBytecode: '0x...',
-    initBytecode: '0x...',
+    bytecode: '0x...',
   },
 });
 ```
@@ -194,48 +222,66 @@ const contract = SolContract.fromArtifacts({
 
 ### Runtime path (scripts, testing)
 
-1. `sol` tag captures the Solidity source string
-2. On first `.call()`, compiles with `solc-js` (lazy-loaded) and caches the result
-3. Derives a deterministic address from the source hash
-4. Executes via `eth_call` with `stateOverride` — the contract bytecode is injected at the derived address without deploying
-5. Decodes the return value via viem's ABI decoder
+1. `sol("Name")` captures the Solidity source string and contract name
+2. On first property access, compiles with `solc-js` (lazy-loaded) and caches the result
+3. Exposes `abi`, `bytecode()`, and `deployedBytecode` for the named contract
+4. Derives a deterministic `address` from `keccak256(deployedBytecode)`
 
 ### Build-time path (apps with bundler plugin)
 
-1. The bundler plugin parses each file's AST to find `sol` tagged templates
+1. The bundler plugin parses each file's AST to find `sol("Name")` tagged templates
 2. For templates with interpolations, resolves `const` string values statically
 3. Compiles the resolved Solidity with `solc-js` during the build
-4. Replaces `` sol`...` `` with `SolContract.fromArtifacts({...})` containing the pre-compiled ABI and bytecode
-5. At runtime, no compilation happens — only ABI encoding, `eth_call`, and decoding
+4. Replaces `` sol("Name")`...` `` with `InlineContract.fromArtifacts("Name", {...})` containing the pre-compiled ABI and bytecode
+5. At runtime, no compilation happens — property access returns pre-compiled data directly
 
 ### IDE path (TypeScript Language Service Plugin)
 
 1. The TS plugin runs in `tsserver` (your editor's TypeScript process)
-2. It finds `sol` tagged templates, compiles them with solc-js, and extracts the ABI
-3. Provides function name completions for `.call()`, hover types showing Solidity-to-TypeScript mappings, and inline diagnostics for Solidity compilation errors
+2. It finds `sol("Name")` tagged templates, compiles them with solc-js, and extracts the ABI
+3. Generates `.soltag/types.d.ts` with module augmentation that narrows `abi` to precise "as const" types and adds typed `bytecode()` overloads per contract
+4. Reports inline Solidity compilation errors and warns if the contract name doesn't match any contract in the source
+
+## Immutables Caveat
+
+Solidity `immutable` variables are assigned in the constructor and baked into the runtime bytecode during deployment. The `deployedBytecode` returned by solc (and exposed by `InlineContract`) contains **placeholder zeros** in immutable slots — the real values are only filled in when the constructor actually runs on-chain.
+
+This means **`deployedBytecode` is unsuitable for `stateOverride` injection** when the contract uses immutable variables. The zeroed slots will cause the contract to behave incorrectly.
+
+If your contract uses immutables, deploy it normally using `bytecode(…constructorArgs)` instead of injecting `deployedBytecode` via `stateOverride`. Note that `bytecode()` returns _creation_ bytecode (the code that runs the constructor and returns the final runtime code), not runtime bytecode with constructor args spliced in — there is no way to produce correct runtime bytecode with immutables without actually executing the constructor.
 
 ## API
 
 ### `sol`
 
 ```ts
-function sol(strings: TemplateStringsArray, ...values: string[]): SolContract;
+function sol<TName extends string>(name: TName):
+  (strings: TemplateStringsArray, ...values: string[]) => InlineContract<TName>;
 ```
 
-Tagged template literal. Accepts string interpolations for composing Solidity from reusable fragments.
+Factory that returns a tagged template function. The `name` must match a contract in the Solidity source.
 
-### `SolContract`
+### `InlineContract<TName>`
 
 ```ts
-class SolContract {
+class InlineContract<TName extends string = string> {
   // Create from pre-compiled artifacts (used by bundler plugin)
-  static fromArtifacts(artifacts: CompilationResult, sourceHash?: Hex): SolContract;
+  static fromArtifacts<T extends string>(name: T, artifacts: CompilationResult): InlineContract<T>;
 
-  // Merged ABI across all contracts in the source
-  readonly abi: Abi;
+  // The contract name (typed as a string literal)
+  get name(): TName;
 
-  // Execute a read-only call via stateOverride
-  call(client: PublicClient, functionName: string, args?: readonly unknown[]): Promise<unknown>;
+  // The contract's ABI (narrowed to precise type via generated .d.ts)
+  get abi(): Abi;
+
+  // Runtime bytecode as emitted by solc (see Immutables Caveat)
+  get deployedBytecode(): Hex;
+
+  // Deterministic address derived from keccak256(deployedBytecode)
+  get address(): Hex;
+
+  // Creation bytecode, optionally with ABI-encoded constructor args appended
+  bytecode(...args: unknown[]): Hex;
 }
 ```
 

@@ -1,18 +1,24 @@
-import { SolContract } from "./contract.js";
+import { InlineContract } from "./contract.js";
 
 /**
- * Tagged template literal for inline Solidity.
+ * Factory for creating inline Solidity contracts with per-contract type narrowing.
  *
  * Usage:
  * ```ts
- * const contract = sol`
+ * const lens = sol("Lens")`
  *   pragma solidity ^0.8.24;
- *   contract Greeter {
- *     function greet() external pure returns (string memory) {
- *       return "hello";
+ *   contract Lens {
+ *     function getBalance(address token, address user) external view returns (uint256) {
+ *       return IERC20(token).balanceOf(user);
  *     }
  *   }
  * `;
+ *
+ * lens.name;             // "Lens"
+ * lens.address;          // deterministic address
+ * lens.abi;              // Lens contract's ABI
+ * lens.deployedBytecode; // runtime bytecode
+ * lens.bytecode();       // creation bytecode
  * ```
  *
  * String interpolation is supported for composing Solidity from reusable fragments:
@@ -23,46 +29,18 @@ import { SolContract } from "./contract.js";
  *   }
  * `;
  *
- * const contract = sol`
- *   ${IERC20}
- *   contract Lens {
- *     function getBalance(address token, address user) external view returns (uint256) {
- *       return IERC20(token).balanceOf(user);
- *     }
- *   }
- * `;
- * ```
- *
- * Factory form enables per-contract type narrowing:
- * ```ts
  * const lens = sol("Lens")`
- *   pragma solidity ^0.8.24;
- *   contract Lens {
- *     function add(uint256 a, uint256 b) external pure returns (uint256) { return a + b; }
- *   }
+ *   ${IERC20}
+ *   contract Lens { ... }
  * `;
- * lens.call(client, 'add', [0n, 0n]); // → Promise<bigint>
  * ```
  */
-export function sol(strings: TemplateStringsArray, ...values: string[]): SolContract;
-export function sol<TName extends string>(
-  name: TName,
-): (strings: TemplateStringsArray, ...values: string[]) => SolContract<TName>;
-export function sol(stringsOrName: TemplateStringsArray | string, ...values: string[]) {
-  if (typeof stringsOrName === "object" && "raw" in stringsOrName) {
-    // Tagged template: sol`...`
-    let source = stringsOrName[0];
-    for (let i = 0; i < values.length; i++) {
-      source += values[i] + stringsOrName[i + 1];
-    }
-    return new SolContract(source);
-  }
-  // Factory: sol("Name") returns tag function
-  return (strings: TemplateStringsArray, ...vals: string[]) => {
+export function sol<TName extends string>(name: TName) {
+  return (strings: TemplateStringsArray, ...vals: string[]): InlineContract<TName> => {
     let source = strings[0];
     for (let i = 0; i < vals.length; i++) {
       source += vals[i] + strings[i + 1];
     }
-    return new SolContract(source);
+    return new InlineContract(source, name);
   };
 }

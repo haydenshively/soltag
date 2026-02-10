@@ -24,7 +24,7 @@ export function createGetSemanticDiagnostics(
 
     for (const literal of solLiterals) {
       // Check for duplicate contract names within this file
-      if (literal.contractName != null && literal.source != null) {
+      if (literal.source != null) {
         const existing = namedContracts.get(literal.contractName);
         if (existing && existing.source !== literal.source) {
           solDiagnostics.push({
@@ -60,6 +60,20 @@ export function createGetSemanticDiagnostics(
           code: 90001,
         });
         continue;
+      }
+
+      // Check if the named contract exists in the compilation output
+      const contractNames = output.contracts ? Object.values(output.contracts).flatMap((f) => Object.keys(f)) : [];
+      if (!contractNames.includes(literal.contractName)) {
+        const tag = literal.node.tag;
+        solDiagnostics.push({
+          file: sourceFile,
+          start: tag.getStart(sourceFile),
+          length: tag.getEnd() - tag.getStart(sourceFile),
+          messageText: `Contract "${literal.contractName}" not found in Solidity source. Available contracts: ${contractNames.join(", ") || "(none)"}`,
+          category: ts.DiagnosticCategory.Error,
+          code: 90003,
+        });
       }
 
       if (!output.errors) continue;

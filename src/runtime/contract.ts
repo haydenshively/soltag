@@ -1,73 +1,100 @@
-import type { Abi, Hex, PublicClient } from "viem";
+import { type Abi, encodeAbiParameters, getAddress, type Hex, keccak256, slice } from "viem";
 
-import { type CompilationResult, type CompiledContract, compile, hashArtifacts } from "./compiler.js";
-import { deriveAddress, executeCall } from "./execution.js";
+import { type CompilationResult, type CompiledContract, compile } from "./compiler.js";
 
-// biome-ignore lint/correctness/noUnusedVariables: TName enables generic type narrowing via module augmentation
-export class SolContract<TName extends string = string> {
+/**
+ * Augment this interface via module augmentation to narrow the `abi` getter
+ * for specific contract names. The generated `.soltag/types.d.ts` does this
+ * automatically.
+ */
+// biome-ignore lint/suspicious/noEmptyInterface: augmented by generated .d.ts
+export interface InlineContractAbiMap {}
+
+export class InlineContract<TName extends string = string> {
   private _source: string;
+  private _name: TName;
   private _compiled: CompilationResult | undefined;
+  private _contract: CompiledContract | undefined;
   private _address: Hex | undefined;
-  private _abi: Abi | undefined;
 
-  constructor(source: string) {
+  constructor(source: string, name: TName) {
     this._source = source;
+    this._name = name;
   }
 
   /**
-   * Create a SolContract from pre-compiled artifacts.
+   * Create a InlineContract from pre-compiled artifacts.
    * Used by the bundler plugin to bypass runtime solc compilation.
    */
-  static fromArtifacts<T extends string = string>(artifacts: CompilationResult): SolContract<T> {
-    const instance = new SolContract("");
+  static fromArtifacts<T extends string>(name: T, artifacts: CompilationResult): InlineContract<T> {
+    const instance = new InlineContract("", name);
     instance._compiled = artifacts;
-    instance._address = deriveAddress(hashArtifacts(artifacts));
-    return instance as SolContract<T>;
+    return instance as InlineContract<T>;
   }
 
-  private ensureCompiled(): CompilationResult {
-    if (!this._compiled) {
-      this._compiled = compile(this._source);
+  private ensureCompiled(): CompiledContract {
+    if (!this._contract) {
+      if (!this._compiled) {
+        this._compiled = compile(this._source);
+      }
+      const contract = this._compiled[this._name];
+      if (!contract) {
+        const available = Object.keys(this._compiled).join(", ");
+        throw new Error(`Contract "${this._name}" not found in compilation result. Available contracts: ${available}`);
+      }
+      this._contract = contract;
     }
-    return this._compiled;
+    return this._contract;
   }
 
-  private getAddress(): Hex {
+  get name(): TName {
+    return this._name;
+  }
+
+  get abi(): TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] : Abi {
+    return this.ensureCompiled().abi as TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] : Abi;
+  }
+
+  /**
+   * The runtime bytecode of the named contract, as emitted by solc.
+   *
+   * **Immutables caveat:** If the contract declares `immutable` variables that
+   * are assigned in the constructor, solc emits placeholder zeros in their
+   * slots. The real values are only filled in during actual deployment (the
+   * constructor runs and writes them into the runtime code). This means
+   * `deployedBytecode` is unsuitable for `stateOverride` injection when the
+   * contract relies on immutables — the zeroed slots will cause unexpected
+   * behavior. In those cases, use `bytecode(…constructorArgs)` to get the
+   * creation bytecode and deploy the contract normally instead.
+   */
+  get deployedBytecode(): Hex {
+    return this.ensureCompiled().deployedBytecode;
+  }
+
+  get address(): Hex {
     if (!this._address) {
-      this._address = deriveAddress(hashArtifacts(this.ensureCompiled()));
+      this._address = getAddress(slice(keccak256(this.deployedBytecode), 0, 20));
     }
     return this._address;
   }
 
-  get abi(): Abi {
-    if (!this._abi) {
-      const compiled = this.ensureCompiled();
-      this._abi = Object.values(compiled).flatMap((c) => c.abi) as Abi;
+  bytecode(...args: unknown[]): Hex {
+    const contract = this.ensureCompiled();
+    if (args.length === 0) return contract.bytecode;
+
+    const constructorAbi = contract.abi.find(
+      (item): item is Extract<typeof item, { type: "constructor" }> => "type" in item && item.type === "constructor",
+    );
+    if (
+      !constructorAbi ||
+      !("inputs" in constructorAbi) ||
+      !constructorAbi.inputs ||
+      constructorAbi.inputs.length === 0
+    ) {
+      throw new Error(`Contract "${this._name}" does not have a constructor that accepts arguments`);
     }
-    return this._abi;
+
+    const encoded = encodeAbiParameters(constructorAbi.inputs, args);
+    return `${contract.bytecode}${encoded.slice(2)}` as Hex;
   }
-
-  call(client: PublicClient, functionName: never, args?: readonly unknown[]): Promise<never>;
-  async call(client: PublicClient, functionName: string, args: readonly unknown[] = []): Promise<unknown> {
-    const compiled = this.ensureCompiled();
-    const { contract } = findContract(compiled, functionName);
-    const address = this.getAddress();
-
-    return executeCall(client, address, contract.deployedBytecode, contract.abi, functionName, args);
-  }
-}
-
-/**
- * Find which compiled contract contains the given function name.
- */
-function findContract(compiled: CompilationResult, functionName: string): { name: string; contract: CompiledContract } {
-  for (const [name, contract] of Object.entries(compiled)) {
-    const hasFunction = contract.abi.some((item) => "name" in item && item.name === functionName);
-    if (hasFunction) {
-      return { name, contract };
-    }
-  }
-
-  const available = Object.keys(compiled).join(", ");
-  throw new Error(`Function "${functionName}" not found in any compiled contract. Available contracts: ${available}`);
 }

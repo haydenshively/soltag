@@ -1,8 +1,14 @@
 import { createRequire } from "node:module";
 
-import { type Abi, concat, type Hex, keccak256, toHex } from "viem";
+import { type Abi, type Hex, keccak256, toHex } from "viem";
 
-import { buildSolcInput, type SolcError, type SolcModule, type SolcStandardOutput } from "../solc.js";
+import {
+  buildSolcInput,
+  type SolcError,
+  type SolcInputOptions,
+  type SolcModule,
+  type SolcStandardOutput,
+} from "../solc.js";
 
 const require = createRequire(import.meta.url);
 
@@ -29,7 +35,7 @@ export interface CompiledContract {
   /** Runtime bytecode (what lives at the contract address). Used with stateOverride. */
   deployedBytecode: Hex;
   /** Init bytecode (constructor + deployment code). Used for actual deployment. */
-  initBytecode: Hex;
+  bytecode: Hex;
 }
 
 export type CompilationResult = Record<string, CompiledContract>;
@@ -56,28 +62,17 @@ export class SolCompilationError extends Error {
 // Cache compiled results by source hash
 const compilationCache = new Map<string, CompilationResult>();
 
-export function hashSource(source: string): Hex {
-  return keccak256(toHex(source));
+export function hashSource(source: string, options?: SolcInputOptions): Hex {
+  return keccak256(toHex(source + JSON.stringify(options ?? {})));
 }
 
-/**
- * Hash compiled artifacts by their deployed bytecodes.
- * Used for deterministic address derivation — immune to source whitespace changes.
- */
-export function hashArtifacts(artifacts: CompilationResult): Hex {
-  const bytecodes = Object.keys(artifacts)
-    .sort()
-    .map((name) => artifacts[name].deployedBytecode);
-  return keccak256(bytecodes.length > 0 ? concat(bytecodes) : "0x");
-}
-
-export function compile(source: string): CompilationResult {
-  const hash = hashSource(source);
+export function compile(source: string, options?: SolcInputOptions): CompilationResult {
+  const hash = hashSource(source, options);
   const cached = compilationCache.get(hash);
   if (cached) return cached;
 
   const solc = getSolc();
-  const input = buildSolcInput(source);
+  const input = buildSolcInput(source, options);
   const rawOutput = solc.compile(JSON.stringify(input));
   const output = JSON.parse(rawOutput) as SolcStandardOutput;
 
@@ -95,7 +90,7 @@ export function compile(source: string): CompilationResult {
         result[contractName] = {
           abi: contractOutput.abi as Abi,
           deployedBytecode: `0x${contractOutput.evm.deployedBytecode.object}` as Hex,
-          initBytecode: `0x${contractOutput.evm.bytecode.object}` as Hex,
+          bytecode: `0x${contractOutput.evm.bytecode.object}` as Hex,
         };
       }
     }

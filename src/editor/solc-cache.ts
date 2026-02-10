@@ -46,34 +46,6 @@ export function compileCached(source: string): SolcStandardOutput {
 }
 
 /**
- * Extract all ABI items from a compilation result.
- */
-export function extractAllAbis(output: SolcStandardOutput): SolcAbiItem[] {
-  if (!output.contracts) return [];
-
-  return Object.values(output.contracts).flatMap((fileContracts) =>
-    Object.values(fileContracts).flatMap((contract) => contract.abi),
-  );
-}
-
-/**
- * Get all view/pure function names from compiled output.
- */
-export function getCallableFunctionNames(output: SolcStandardOutput): string[] {
-  return extractAllAbis(output)
-    .filter((item) => item.type === "function" && (item.stateMutability === "view" || item.stateMutability === "pure"))
-    .map((item) => item.name!)
-    .filter(Boolean);
-}
-
-/**
- * Find a specific function's ABI item by name.
- */
-export function findFunctionAbi(output: SolcStandardOutput, functionName: string): SolcAbiItem | undefined {
-  return extractAllAbis(output).find((item) => item.type === "function" && item.name === functionName);
-}
-
-/**
  * Get the ABI for a specific contract by name.
  */
 export function getContractAbi(output: SolcStandardOutput, contractName: string): SolcAbiItem[] | undefined {
@@ -84,4 +56,16 @@ export function getContractAbi(output: SolcStandardOutput, contractName: string)
     }
   }
   return undefined;
+}
+
+/**
+ * Get the constructor inputs for a specific contract by name.
+ * Returns an empty array if the contract has no constructor or no inputs.
+ */
+export function getConstructorInputs(output: SolcStandardOutput, contractName: string): SolcAbiParam[] {
+  const abi = getContractAbi(output, contractName);
+  if (!abi) return [];
+
+  const ctor = abi.find((item) => item.type === "constructor");
+  return ctor?.inputs ?? [];
 }

@@ -5,13 +5,8 @@ import MagicString from "magic-string";
 import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
-import {
-  type ContractTypeEntry,
-  type FunctionOverload,
-  generateDeclarationContent,
-  SOLTAG_DIR,
-  SOLTAG_TYPES_FILE,
-} from "../codegen.js";
+import { extractTemplateSource, isSolTag, type TsModule } from "../ast-utils.js";
+import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "../codegen.js";
 import { compile } from "../runtime/compiler.js";
 import type { SolcAbiParam } from "../solc.js";
 
@@ -20,101 +15,23 @@ export interface SoltagPluginOptions {
   include?: string[];
   /** Patterns to exclude. Defaults to [/node_modules/] */
   exclude?: RegExp[];
+  /** Solc compiler settings */
+  solc?: {
+    /** Optimizer settings */
+    optimizer?: {
+      enabled?: boolean;
+      runs?: number;
+    };
+  };
 }
 
 /**
- * Try to resolve a TS expression to a string constant at build time.
- * Returns the resolved string, or undefined if the expression can't be statically resolved.
+ * Get constructor inputs from a compiled contract's ABI.
  */
-function resolveStringExpression(node: ts.Expression, sourceFile: ts.SourceFile): string | undefined {
-  if (ts.isStringLiteral(node)) return node.text;
-
-  if (ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-
-  if (ts.isTemplateExpression(node)) {
-    let result = node.head.text;
-    for (const span of node.templateSpans) {
-      const resolved = resolveStringExpression(span.expression, sourceFile);
-      if (resolved === undefined) return undefined;
-      result += resolved + span.literal.text;
-    }
-    return result;
-  }
-
-  if (ts.isIdentifier(node)) {
-    return resolveIdentifierToString(node, sourceFile);
-  }
-
-  // String concatenation with +
-  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const left = resolveStringExpression(node.left, sourceFile);
-    const right = resolveStringExpression(node.right, sourceFile);
-    if (left !== undefined && right !== undefined) return left + right;
-    return undefined;
-  }
-
-  return undefined;
-}
-
-/**
- * Find a const declaration for an identifier and resolve its string value.
- */
-function resolveIdentifierToString(identifier: ts.Identifier, sourceFile: ts.SourceFile): string | undefined {
-  const name = identifier.text;
-
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    if (!(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
-
-    for (const decl of statement.declarationList.declarations) {
-      if (ts.isIdentifier(decl.name) && decl.name.text === name && decl.initializer) {
-        return resolveStringExpression(decl.initializer, sourceFile);
-      }
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Extract the full Solidity source from a tagged template, resolving interpolations.
- * Returns undefined if any interpolation can't be statically resolved.
- */
-function extractTemplateSource(template: ts.TemplateLiteral, sourceFile: ts.SourceFile): string | undefined {
-  if (ts.isNoSubstitutionTemplateLiteral(template)) {
-    return template.text;
-  }
-
-  let result = template.head.text;
-  for (const span of template.templateSpans) {
-    const resolved = resolveStringExpression(span.expression, sourceFile);
-    if (resolved === undefined) return undefined;
-    result += resolved + span.literal.text;
-  }
-  return result;
-}
-
-/**
- * Extract callable functions from a compiled contract's viem Abi.
- */
-function extractCallableFunctions(abi: readonly Record<string, unknown>[]): FunctionOverload[] {
-  const functions: FunctionOverload[] = [];
-
-  for (const item of abi) {
-    if (
-      item.type === "function" &&
-      (item.stateMutability === "view" || item.stateMutability === "pure") &&
-      typeof item.name === "string"
-    ) {
-      functions.push({
-        name: item.name,
-        inputs: (item.inputs ?? []) as SolcAbiParam[],
-        outputs: (item.outputs ?? []) as SolcAbiParam[],
-      });
-    }
-  }
-
-  return functions;
+function getConstructorInputs(abi: readonly Record<string, unknown>[]): SolcAbiParam[] {
+  const ctor = abi.find((item) => item.type === "constructor");
+  if (!ctor) return [];
+  return (ctor.inputs ?? []) as SolcAbiParam[];
 }
 
 /**
@@ -124,8 +41,11 @@ export function transformSolTemplates(
   code: string,
   id: string,
   namedEntries?: Map<string, ContractTypeEntry>,
+  options?: SoltagPluginOptions,
 ): { code: string; map: ReturnType<MagicString["generateMap"]> } | undefined {
-  if (!code.includes("sol`") && !code.includes("sol `") && !code.includes("sol(")) return undefined;
+  // Regex fast-path: skip parsing if "sol" tag isn't present
+  // Matches: sol("...") or sol('...') allow whitespace
+  if (!/\bsol\s*\(\s*["'][^"']+["']\s*\)/.test(code)) return undefined;
 
   const sourceFile = ts.createSourceFile(id, code, ts.ScriptTarget.Latest, true);
   const s = new MagicString(code);
@@ -133,50 +53,33 @@ export function transformSolTemplates(
 
   function visit(node: ts.Node) {
     if (ts.isTaggedTemplateExpression(node)) {
-      let contractName: string | undefined;
-      let isSol = false;
+      const solTag = isSolTag(ts as unknown as TsModule, node.tag);
+      if (solTag) {
+        const contractName = solTag.contractName;
+        const soliditySource = extractTemplateSource(ts as unknown as TsModule, node.template, sourceFile);
 
-      // NOTE: This detection logic mirrors editor/analysis.ts `isSolTag()`.
-      // It's duplicated here because the build plugin uses the `typescript`
-      // package directly, while the tsserver plugin uses `tsserverlibrary`.
-      if (ts.isIdentifier(node.tag) && node.tag.text === "sol") {
-        // Plain form: sol`...`
-        isSol = true;
-      } else if (
-        ts.isCallExpression(node.tag) &&
-        ts.isIdentifier(node.tag.expression) &&
-        node.tag.expression.text === "sol" &&
-        node.tag.arguments.length === 1 &&
-        ts.isStringLiteral(node.tag.arguments[0])
-      ) {
-        // Factory form: sol("Name")`...`
-        isSol = true;
-        contractName = node.tag.arguments[0].text;
-      }
-
-      if (isSol) {
-        const soliditySource = extractTemplateSource(node.template, sourceFile);
         if (soliditySource === undefined) {
           // Can't resolve at build time — leave for runtime
           return;
         }
 
-        const artifacts = compile(soliditySource);
+        const artifacts = compile(soliditySource, options?.solc);
 
-        // Collect named entries for .d.ts generation (only the named contract's functions)
-        if (contractName != null && namedEntries != null) {
+        // Collect named entries for .d.ts generation
+        if (namedEntries != null) {
           const contractArtifact = artifacts[contractName];
-          const functions = contractArtifact
-            ? extractCallableFunctions(contractArtifact.abi as unknown as Record<string, unknown>[])
+          const constructorInputs = contractArtifact
+            ? getConstructorInputs(contractArtifact.abi as unknown as Record<string, unknown>[])
             : [];
+          const abi = contractArtifact ? (contractArtifact.abi as unknown[]) : [];
           namedEntries.set(`${contractName}\0${soliditySource}`, {
             contractName,
-            functions,
+            constructorInputs,
+            abi,
           });
         }
 
-        const generic = contractName != null ? `<${JSON.stringify(contractName)}>` : "";
-        const replacement = `__SolContract.fromArtifacts${generic}(${JSON.stringify(artifacts)})`;
+        const replacement = `__InlineContract.fromArtifacts(${JSON.stringify(contractName)}, ${JSON.stringify(artifacts)})`;
         s.overwrite(node.getStart(sourceFile), node.getEnd(), replacement);
         hasReplacements = true;
         return; // Don't visit children
@@ -190,7 +93,7 @@ export function transformSolTemplates(
 
   if (!hasReplacements) return undefined;
 
-  s.prepend('import { SolContract as __SolContract } from "soltag";\n');
+  s.prepend('import { InlineContract as __InlineContract } from "soltag";\n');
 
   return {
     code: s.toString(),
@@ -230,7 +133,7 @@ export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
         if (!rootDir) {
           rootDir = process.cwd();
         }
-        return transformSolTemplates(code, id, namedEntries);
+        return transformSolTemplates(code, id, namedEntries, options);
       },
     },
 

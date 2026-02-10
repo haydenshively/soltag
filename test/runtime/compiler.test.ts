@@ -18,7 +18,7 @@ describe("compiler", () => {
     expect(result.Greeter.abi).toBeInstanceOf(Array);
     expect(result.Greeter.abi.length).toBeGreaterThan(0);
     expect(result.Greeter.deployedBytecode).toMatch(/^0x/);
-    expect(result.Greeter.initBytecode).toMatch(/^0x/);
+    expect(result.Greeter.bytecode).toMatch(/^0x/);
   });
 
   it("compiles a library", () => {

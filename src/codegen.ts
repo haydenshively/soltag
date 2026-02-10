@@ -39,35 +39,45 @@ export function solidityTypeToTs(param: SolcAbiParam): string {
 }
 
 /**
- * Format a function's return type for display.
+ * Serialize a JSON-compatible value as a deeply-readonly TypeScript type literal.
+ * Produces the same shape as `as const` would.
  */
-export function formatReturnType(outputs: SolcAbiParam[]): string {
-  if (outputs.length === 0) return "void";
-  if (outputs.length === 1) return solidityTypeToTs(outputs[0]);
-  // Multiple returns → tuple
-  return `[${outputs.map((o) => solidityTypeToTs(o)).join(", ")}]`;
-}
+export function jsonToConstType(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return String(value);
 
-export interface FunctionOverload {
-  name: string;
-  inputs: SolcAbiParam[];
-  outputs: SolcAbiParam[];
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "readonly []";
+    return `readonly [${value.map(jsonToConstType).join(", ")}]`;
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return "{}";
+    const fields = entries.map(([k, v]) => `readonly ${k}: ${jsonToConstType(v)}`);
+    return `{ ${fields.join("; ")} }`;
+  }
+
+  return "unknown";
 }
 
 export interface ContractTypeEntry {
   contractName: string;
-  functions: FunctionOverload[];
+  constructorInputs: SolcAbiParam[];
+  abi: unknown[];
 }
 
 export interface GenerationResult {
   content: string;
-  /** Contract names that appear more than once with different function signatures */
+  /** Contract names that appear more than once with different signatures */
   duplicates: string[];
 }
 
 /**
- * Generate the content of a `.d.ts` file with `call()` overloads
- * for all named sol contracts.
+ * Generate the content of a `.d.ts` file with `InlineContractAbiMap` entries
+ * and `bytecode()` overloads for all named sol contracts.
  *
  * Accepts pre-compiled entries so this module has no solc dependency
  * and can be shared between the tsserver plugin and the bundler.
@@ -75,7 +85,7 @@ export interface GenerationResult {
 export function generateDeclarationContent(entries: ContractTypeEntry[]): GenerationResult {
   if (entries.length === 0) return { content: "", duplicates: [] };
 
-  // Detect duplicates: same contractName, different function sets
+  // Detect duplicates: same contractName, different signatures
   const byName = new Map<string, ContractTypeEntry[]>();
   for (const entry of entries) {
     const existing = byName.get(entry.contractName);
@@ -93,32 +103,41 @@ export function generateDeclarationContent(entries: ContractTypeEntry[]): Genera
     unique.push(group[0]);
     if (group.length > 1) {
       // Check if they actually differ
-      const fingerprints = new Set(group.map((e) => JSON.stringify(e.functions)));
+      const fingerprints = new Set(
+        group.map((e) => JSON.stringify({ constructorInputs: e.constructorInputs, abi: e.abi })),
+      );
       if (fingerprints.size > 1) {
         duplicates.push(name);
       }
     }
   }
 
+  const abiMapEntries: string[] = [];
   const overloads: string[] = [];
 
   for (const entry of unique) {
-    for (const fn of entry.functions) {
-      const argTypes = fn.inputs.map((p) => solidityTypeToTs(p));
-      const argsType = argTypes.length === 0 ? "readonly []" : `readonly [${argTypes.join(", ")}]`;
-      const returnType = formatReturnType(fn.outputs);
+    // ABI map entry
+    abiMapEntries.push(`      ${JSON.stringify(entry.contractName)}: ${jsonToConstType(entry.abi)};`);
 
-      overloads.push(
-        `      call(this: SolContract<${JSON.stringify(entry.contractName)}>, client: import("viem").PublicClient, fn: ${JSON.stringify(fn.name)}, args: ${argsType}): Promise<${returnType}>;`,
-      );
-    }
+    // bytecode() overload
+    const params = entry.constructorInputs.map((p, i) => {
+      const name = p.name || `arg${i}`;
+      return `${name}: ${solidityTypeToTs(p)}`;
+    });
+
+    overloads.push(
+      `      bytecode(this: InlineContract<${JSON.stringify(entry.contractName)}>${params.length > 0 ? `, ${params.join(", ")}` : ""}): \`0x\${string}\`;`,
+    );
   }
 
-  if (overloads.length === 0) return { content: "", duplicates };
+  if (unique.length === 0) return { content: "", duplicates };
 
   const content = `export {}
 declare module "soltag" {
-  interface SolContract<TName extends string> {
+  interface InlineContractAbiMap {
+${abiMapEntries.join("\n")}
+  }
+  interface InlineContract<TName extends string> {
 ${overloads.join("\n")}
   }
 }
