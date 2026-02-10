@@ -58,7 +58,7 @@ describe("sol factory form", () => {
     expect(balanceOf).toBeUndefined();
   });
 
-  it("exposes a deterministic address derived from deployedBytecode", () => {
+  it("exposes a deterministic CREATE2 address derived from bytecode", () => {
     const contract = sol("Greeter")`
       // SPDX-License-Identifier: MIT
       pragma solidity ^0.8.24;

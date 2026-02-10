@@ -1,6 +1,9 @@
-import { type Abi, encodeAbiParameters, getAddress, type Hex, keccak256, slice } from "viem";
+import { type Abi, type Address, encodeAbiParameters, getContractAddress, type Hex, zeroAddress } from "viem";
 
 import { type CompilationResult, type CompiledContract, compile } from "./compiler.js";
+
+export const CREATE2_FACTORY: Address = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
+export const CREATE2_SALT: Hex = `${zeroAddress}51A1E51A1E51A1E51A1E51A1`;
 
 /**
  * Augment this interface via module augmentation to narrow the `abi` getter
@@ -15,7 +18,7 @@ export class InlineContract<TName extends string = string> {
   private _name: TName;
   private _compiled: CompilationResult | undefined;
   private _contract: CompiledContract | undefined;
-  private _address: Hex | undefined;
+  private _address: Address | undefined;
 
   constructor(source: string, name: TName) {
     this._source = source;
@@ -71,11 +74,27 @@ export class InlineContract<TName extends string = string> {
     return this.ensureCompiled().deployedBytecode;
   }
 
-  get address(): Hex {
+  get address(): Address {
     if (!this._address) {
-      this._address = getAddress(slice(keccak256(this.deployedBytecode), 0, 20));
+      this._address = getContractAddress({
+        bytecode: this.ensureCompiled().bytecode,
+        from: CREATE2_FACTORY,
+        opcode: "CREATE2",
+        salt: CREATE2_SALT,
+      });
     }
     return this._address;
+  }
+
+  /**
+   * Convenience object for use with viem's `stateOverride` parameter.
+   *
+   * **Immutables caveat:** same as {@link deployedBytecode} — if the contract
+   * declares `immutable` variables assigned in the constructor, the slots will
+   * contain placeholder zeros and the override will not behave correctly.
+   */
+  get stateOverride(): { address: Address; code: Hex } {
+    return { address: this.address, code: this.deployedBytecode };
   }
 
   bytecode(...args: unknown[]): Hex {
