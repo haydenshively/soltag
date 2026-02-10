@@ -2,6 +2,7 @@ import type tslib from "typescript/lib/tsserverlibrary";
 
 import { findSolTemplateLiterals } from "./analysis.js";
 import { compileCached, type SolcStandardOutput } from "./solc-cache.js";
+import { isDuplicateContractName } from "./typegen.js";
 
 export function createGetSemanticDiagnostics(
   ts: typeof tslib,
@@ -19,29 +20,17 @@ export function createGetSemanticDiagnostics(
     const solLiterals = findSolTemplateLiterals(ts, sourceFile);
     const solDiagnostics: tslib.Diagnostic[] = [];
 
-    // Track named contracts in this file to detect same-file duplicates
-    const namedContracts = new Map<string, { source: string; pos: number; end: number }>();
-
     for (const literal of solLiterals) {
-      // Check for duplicate contract names within this file
-      if (literal.source != null) {
-        const existing = namedContracts.get(literal.contractName);
-        if (existing && existing.source !== literal.source) {
-          solDiagnostics.push({
-            file: sourceFile,
-            start: literal.pos,
-            length: literal.end - literal.pos,
-            messageText: `Duplicate contract name "${literal.contractName}" with different Solidity source. Only the first definition will be used for type generation.`,
-            category: ts.DiagnosticCategory.Warning,
-            code: 90002,
-          });
-        } else if (!existing) {
-          namedContracts.set(literal.contractName, {
-            source: literal.source,
-            pos: literal.pos,
-            end: literal.end,
-          });
-        }
+      // Warn when multiple contracts share a name but have different compiled signatures
+      if (literal.source != null && isDuplicateContractName(literal.contractName)) {
+        solDiagnostics.push({
+          file: sourceFile,
+          start: literal.pos,
+          length: literal.end - literal.pos,
+          messageText: `Duplicate contract name "${literal.contractName}". Multiple contracts with this name but different definitions exist in this project. Only the first definition will be used for type generation.`,
+          category: ts.DiagnosticCategory.Warning,
+          code: 90002,
+        });
       }
 
       if (literal.source === undefined) continue;

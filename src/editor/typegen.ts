@@ -9,6 +9,17 @@ import { findSolTemplateLiterals } from "./analysis.js";
 import { compileCached, getConstructorInputs, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
 
 /**
+ * Contract names that appear multiple times across the project with different
+ * compiled signatures (ABI / constructor inputs).  Populated as a side-effect
+ * of `regenerateTypesFile` and queried by the diagnostics layer.
+ */
+let duplicateContractNames: ReadonlySet<string> = new Set();
+
+export function isDuplicateContractName(name: string): boolean {
+  return duplicateContractNames.has(name);
+}
+
+/**
  * Get the path to the generated types file for a project directory.
  */
 export function getTypesFilePath(projectDirectory: string): string {
@@ -84,6 +95,8 @@ export function regenerateTypesFile(
   const rawEntries = collectSolEntries(ts, info);
   const compiled = compileEntries(rawEntries);
   const { content, duplicates } = generateDeclarationContent(compiled);
+
+  duplicateContractNames = new Set(duplicates);
 
   for (const name of duplicates) {
     info.project.projectService.logger.info(

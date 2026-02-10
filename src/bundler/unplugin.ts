@@ -141,7 +141,13 @@ export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
       if (!rootDir || namedEntries.size === 0) return;
 
       const entries = Array.from(namedEntries.values());
-      const { content } = generateDeclarationContent(entries);
+      const { content, duplicates } = generateDeclarationContent(entries);
+
+      for (const name of duplicates) {
+        console.warn(
+          `[soltag] Multiple contracts named "${name}" with different definitions exist in this project. Only the first definition will be used for type generation.`,
+        );
+      }
 
       if (content === "") return;
 
