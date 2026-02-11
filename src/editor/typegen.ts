@@ -4,9 +4,9 @@ import * as path from "path";
 import type tslib from "typescript/lib/tsserverlibrary";
 
 import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "../codegen.js";
+import { compileCached, getConstructorInputs, getContractAbi, type SolcStandardOutput } from "../solc.js";
 
 import { findSolTemplateLiterals } from "./analysis.js";
-import { compileCached, getConstructorInputs, getContractAbi, type SolcStandardOutput } from "./solc-cache.js";
 
 /**
  * Contract names that appear multiple times across the project with different
@@ -26,7 +26,7 @@ export function getTypesFilePath(projectDirectory: string): string {
   return path.join(projectDirectory, SOLTAG_DIR, SOLTAG_TYPES_FILE);
 }
 
-export interface RawSolEntry {
+interface RawSolEntry {
   contractName: string;
   source: string;
 }
@@ -34,7 +34,7 @@ export interface RawSolEntry {
 /**
  * Collect all sol template entries from the project's source files.
  */
-export function collectSolEntries(ts: typeof tslib, info: tslib.server.PluginCreateInfo): RawSolEntry[] {
+function collectSolEntries(ts: typeof tslib, info: tslib.server.PluginCreateInfo): RawSolEntry[] {
   const program = info.languageService.getProgram();
   if (!program) return [];
 
@@ -63,7 +63,7 @@ export function collectSolEntries(ts: typeof tslib, info: tslib.server.PluginCre
  * Compile raw sol entries into ContractTypeEntry[] for codegen.
  * Extracts constructor inputs for bytecode() overloads.
  */
-export function compileEntries(rawEntries: RawSolEntry[]): ContractTypeEntry[] {
+function compileEntries(rawEntries: RawSolEntry[]): ContractTypeEntry[] {
   const entries: ContractTypeEntry[] = [];
 
   for (const raw of rawEntries) {

@@ -96,14 +96,12 @@ describe("codegen", () => {
   });
 
   describe("generateDeclarationContent", () => {
-    it("generates bytecode overloads for named contracts", () => {
+    it("generates bytecode map entries for named contracts", () => {
       const { content } = generateDeclarationContent([LENS_ENTRY]);
 
       expect(content).toContain('declare module "soltag"');
-      expect(content).toContain("InlineContract<");
+      expect(content).toContain("interface InlineContractConstructorArgsMap");
       expect(content).toContain('"Lens"');
-      expect(content).toContain("bytecode(");
-      expect(content).toContain("`0x${string}`");
     });
 
     it("returns empty string for empty entries", () => {
@@ -113,9 +111,10 @@ describe("codegen", () => {
 
     it("deduplicates entries with same contractName and constructorInputs", () => {
       const { content } = generateDeclarationContent([LENS_ENTRY, LENS_ENTRY]);
-      // Should only have one bytecode overload
-      const bytecodeMatches = content.match(/bytecode\(/g);
-      expect(bytecodeMatches).toHaveLength(1);
+      // Should only have one entry per contract name
+      const lensMatches = content.match(/"Lens":/g);
+      // One in AbiMap, one in BytecodeMap
+      expect(lensMatches).toHaveLength(2);
     });
 
     it("detects duplicate names with different constructor signatures", () => {
@@ -134,22 +133,14 @@ describe("codegen", () => {
       expect(duplicates).toHaveLength(0);
     });
 
-    it("generates bytecode overload with constructor params", () => {
+    it("generates bytecode map entry with constructor params", () => {
       const { content } = generateDeclarationContent([TOKEN_ENTRY]);
-      expect(content).toContain('"MyToken"');
-      expect(content).toContain("supply: bigint");
-      expect(content).toContain("bytecode(");
+      expect(content).toContain('"MyToken": [supply: bigint]');
     });
 
-    it("generates no-arg bytecode overload for contracts without constructors", () => {
+    it("generates empty tuple for contracts without constructors", () => {
       const { content } = generateDeclarationContent([LENS_ENTRY]);
-      // Should have bytecode(this: InlineContract<"Lens">): `0x${string}`
-      expect(content).toContain('bytecode(this: InlineContract<"Lens">)');
-    });
-
-    it("uses this-parameter narrowing", () => {
-      const { content } = generateDeclarationContent([LENS_ENTRY]);
-      expect(content).toContain('this: InlineContract<"Lens">');
+      expect(content).toContain('"Lens": []');
     });
 
     it("includes export {} so declare module is an augmentation, not an ambient declaration", () => {

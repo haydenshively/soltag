@@ -1,6 +1,6 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
-import { extractTemplateSource, isSolTag, type TsModule } from "../ast-utils.js";
+import { extractTemplateSource, isSolTag } from "../ast-utils.js";
 
 export interface SolLiteralInfo {
   /** Solidity source text, or undefined if the template has unresolvable interpolations */
@@ -32,14 +32,10 @@ export function findSolTemplateLiterals(ts: typeof tslib, sourceFile: tslib.Sour
 
   function visit(node: tslib.Node) {
     if (ts.isTaggedTemplateExpression(node)) {
-      const solTag = isSolTag(ts as unknown as TsModule, node.tag);
+      const solTag = isSolTag(ts, node.tag);
       if (solTag !== false) {
         results.push({
-          source: extractTemplateSource(
-            ts as unknown as TsModule,
-            node.template,
-            sourceFile as unknown as tslib.SourceFile,
-          ),
+          source: extractTemplateSource(ts, node.template, sourceFile as unknown as tslib.SourceFile),
           contractName: solTag.contractName,
           pos: node.pos,
           end: node.end,

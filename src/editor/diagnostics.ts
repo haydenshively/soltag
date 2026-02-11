@@ -1,9 +1,9 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
-import { resolveStringExpression, type TsModule } from "../ast-utils.js";
+import { resolveStringExpression } from "../ast-utils.js";
+import { compileCached, type SolcStandardOutput } from "../solc.js";
 
 import { findSolTemplateLiterals } from "./analysis.js";
-import { compileCached, type SolcStandardOutput } from "./solc-cache.js";
 import { isDuplicateContractName } from "./typegen.js";
 
 /**
@@ -36,7 +36,7 @@ function mapCompiledPosToEditor(
 
   for (const span of expr.templateSpans) {
     // Resolved expression region — map to the expression node in the editor
-    const resolved = resolveStringExpression(ts as unknown as TsModule, span.expression, sourceFile);
+    const resolved = resolveStringExpression(ts, span.expression, sourceFile);
     const resolvedLen = resolved?.length ?? 0;
     if (compiledPos < compiledOffset + resolvedLen) {
       return side === "start" ? span.expression.getStart(sourceFile) : span.expression.getEnd();

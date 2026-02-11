@@ -19,7 +19,7 @@ describe("unplugin transform", () => {
     expect(result).toBeUndefined();
   });
 
-  it("transforms sol('Name')` ` with fromArtifacts call", () => {
+  it("transforms sol('Name')` ` with InlineContract constructor call", () => {
     const input = `
 import { sol } from 'soltag';
 const contract = sol("Greeter")\`
@@ -35,7 +35,7 @@ const contract = sol("Greeter")\`
     const result = transformSolTemplates(input, "test.ts");
 
     expect(result).toBeDefined();
-    expect(result!.code).toContain('__InlineContract.fromArtifacts("Greeter",');
+    expect(result!.code).toContain('new __InlineContract("Greeter",');
     expect(result!.code).not.toContain("sol(");
   });
 
@@ -138,7 +138,7 @@ const contract = sol("Lens")\`
     const result = transformSolTemplates(input, "test.ts");
 
     expect(result).toBeDefined();
-    expect(result!.code).toContain("__InlineContract.fromArtifacts(");
+    expect(result!.code).toContain("new __InlineContract(");
     expect(result!.code).toContain('"Lens"');
     expect(result!.code).toContain('"abi"');
   });

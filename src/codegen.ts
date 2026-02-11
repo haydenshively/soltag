@@ -69,20 +69,14 @@ export interface ContractTypeEntry {
   abi: unknown[];
 }
 
-export interface GenerationResult {
-  content: string;
-  /** Contract names that appear more than once with different signatures */
-  duplicates: string[];
-}
-
 /**
- * Generate the content of a `.d.ts` file with `InlineContractAbiMap` entries
- * and `bytecode()` overloads for all named sol contracts.
+ * Generate the content of a `.d.ts` file with `InlineContractAbiMap` and
+ * `InlineContractConstructorArgsMap` entries for all named sol contracts.
  *
  * Accepts pre-compiled entries so this module has no solc dependency
  * and can be shared between the tsserver plugin and the bundler.
  */
-export function generateDeclarationContent(entries: ContractTypeEntry[]): GenerationResult {
+export function generateDeclarationContent(entries: ContractTypeEntry[]) {
   if (entries.length === 0) return { content: "", duplicates: [] };
 
   // Detect duplicates: same contractName, different signatures
@@ -113,21 +107,18 @@ export function generateDeclarationContent(entries: ContractTypeEntry[]): Genera
   }
 
   const abiMapEntries: string[] = [];
-  const overloads: string[] = [];
+  const bytecodeMapEntries: string[] = [];
 
   for (const entry of unique) {
     // ABI map entry
     abiMapEntries.push(`      ${JSON.stringify(entry.contractName)}: ${jsonToConstType(entry.abi)};`);
 
-    // bytecode() overload
+    // Bytecode map entry (named tuple of constructor params)
     const params = entry.constructorInputs.map((p, i) => {
       const name = p.name || `arg${i}`;
       return `${name}: ${solidityTypeToTs(p)}`;
     });
-
-    overloads.push(
-      `      bytecode(this: InlineContract<${JSON.stringify(entry.contractName)}>${params.length > 0 ? `, ${params.join(", ")}` : ""}): \`0x\${string}\`;`,
-    );
+    bytecodeMapEntries.push(`      ${JSON.stringify(entry.contractName)}: [${params.join(", ")}];`);
   }
 
   if (unique.length === 0) return { content: "", duplicates };
@@ -137,8 +128,8 @@ declare module "soltag" {
   interface InlineContractAbiMap {
 ${abiMapEntries.join("\n")}
   }
-  interface InlineContract<TName extends string> {
-${overloads.join("\n")}
+  interface InlineContractConstructorArgsMap {
+${bytecodeMapEntries.join("\n")}
   }
 }
 `;

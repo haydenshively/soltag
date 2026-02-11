@@ -253,26 +253,19 @@ const balanceLens = sol("BalanceLens")`
 `;
 ```
 
-The bundler plugin resolves `const` string interpolations at build time, so these templates are still compiled ahead of time. Interpolations that can't be statically resolved (e.g. variables from function calls) are left for runtime compilation.
+The bundler plugin resolves `const` string interpolations at build time, so these templates are still compiled ahead of time. Interpolations that can't be statically resolved (e.g. variables from function calls) will cause a build error — extract the dynamic part into a separate contract or make it a `const`.
 
 ## How It Works
 
-### Runtime path (scripts, testing)
-
-1. `sol("Name")` captures the Solidity source string and contract name
-2. On first property access, compiles with `solc-js` (lazy-loaded) and caches the result
-3. Exposes `abi`, `bytecode()`, and `deployedBytecode` for the named contract
-4. Derives a deterministic `address` from `keccak256(deployedBytecode)`
-
-### Build-time path (apps with bundler plugin)
+### Bundler plugin
 
 1. The bundler plugin parses each file's AST to find `sol("Name")` tagged templates
 2. For templates with interpolations, resolves `const` string values statically
 3. Compiles the resolved Solidity with `solc-js` during the build
-4. Replaces `` sol("Name")`...` `` with `InlineContract.fromArtifacts("Name", {...})` containing the pre-compiled ABI and bytecode
+4. Replaces `` sol("Name")`...` `` with `new InlineContract("Name", {...})` containing the pre-compiled ABI and bytecode
 5. At runtime, no compilation happens — property access returns pre-compiled data directly
 
-### IDE path (TypeScript Language Service Plugin)
+### TypeScript Language Service Plugin
 
 1. The TS plugin runs in `tsserver` (your editor's TypeScript process)
 2. It finds `sol("Name")` tagged templates, compiles them with solc-js, and extracts the ABI
@@ -296,15 +289,12 @@ function sol<TName extends string>(name: TName):
   (strings: TemplateStringsArray, ...values: string[]) => InlineContract<TName>;
 ```
 
-Factory that returns a tagged template function. The `name` must match a contract in the Solidity source.
+Factory that returns a tagged template function. The `name` must match a contract in the Solidity source. The bundler plugin transforms `sol("Name")` calls at build time — `sol` itself never executes at runtime.
 
 ### `InlineContract<TName>`
 
 ```ts
 class InlineContract<TName extends string = string> {
-  // Create from pre-compiled artifacts (used by bundler plugin)
-  static fromArtifacts<T extends string>(name: T, artifacts: CompilationResult): InlineContract<T>;
-
   // The contract name (typed as a string literal)
   get name(): TName;
 
@@ -314,14 +304,13 @@ class InlineContract<TName extends string = string> {
   // Runtime bytecode as emitted by solc (see Immutables Caveat)
   get deployedBytecode(): Hex;
 
-  // Deterministic address derived from keccak256(deployedBytecode)
-  get address(): Hex;
+  // Deterministic address derived from CREATE2(bytecode)
+  get address(): Address;
+
+  // Convenience object for viem's stateOverride parameter
+  get stateOverride(): { address: Address; code: Hex };
 
   // Creation bytecode, optionally with ABI-encoded constructor args appended
   bytecode(...args: unknown[]): Hex;
 }
 ```
-
-### `SolCompilationError`
-
-Thrown when Solidity compilation fails. Contains a `.errors` array of `SolcDiagnostic` objects with severity, message, and source location.

@@ -7,6 +7,7 @@ export default defineConfig([
     dts: true,
     sourcemap: true,
     clean: true,
+    external: ['viem'],
   },
   {
     entry: { plugin: 'src/editor/index.ts' },

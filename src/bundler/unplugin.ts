@@ -5,10 +5,9 @@ import MagicString from "magic-string";
 import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
-import { extractTemplateSource, isSolTag, type TsModule } from "../ast-utils.js";
+import { extractTemplateSource, isSolTag } from "../ast-utils.js";
 import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "../codegen.js";
-import { compile } from "../runtime/compiler.js";
-import type { SolcAbiParam } from "../solc.js";
+import { compileCached, compileToArtifacts, getConstructorInputs, getContractAbi } from "../solc.js";
 
 export interface SoltagPluginOptions {
   /** Extra file extensions to include. Defaults to ['.ts', '.tsx', '.mts', '.cts'] */
@@ -23,15 +22,6 @@ export interface SoltagPluginOptions {
       runs?: number;
     };
   };
-}
-
-/**
- * Get constructor inputs from a compiled contract's ABI.
- */
-function getConstructorInputs(abi: readonly Record<string, unknown>[]): SolcAbiParam[] {
-  const ctor = abi.find((item) => item.type === "constructor");
-  if (!ctor) return [];
-  return (ctor.inputs ?? []) as SolcAbiParam[];
 }
 
 /**
@@ -53,25 +43,23 @@ export function transformSolTemplates(
 
   function visit(node: ts.Node) {
     if (ts.isTaggedTemplateExpression(node)) {
-      const solTag = isSolTag(ts as unknown as TsModule, node.tag);
+      const solTag = isSolTag(ts, node.tag);
       if (solTag) {
         const contractName = solTag.contractName;
-        const soliditySource = extractTemplateSource(ts as unknown as TsModule, node.template, sourceFile);
+        const soliditySource = extractTemplateSource(ts, node.template, sourceFile);
 
         if (soliditySource === undefined) {
           // Can't resolve at build time — leave for runtime
           return;
         }
 
-        const artifacts = compile(soliditySource, options?.solc);
+        const artifacts = compileToArtifacts(soliditySource, options?.solc);
 
         // Collect named entries for .d.ts generation
         if (namedEntries != null) {
-          const contractArtifact = artifacts[contractName];
-          const constructorInputs = contractArtifact
-            ? getConstructorInputs(contractArtifact.abi as unknown as Record<string, unknown>[])
-            : [];
-          const abi = contractArtifact ? (contractArtifact.abi as unknown[]) : [];
+          const rawOutput = compileCached(soliditySource, options?.solc); // cached, no extra work
+          const constructorInputs = getConstructorInputs(rawOutput, contractName);
+          const abi = (getContractAbi(rawOutput, contractName) ?? []) as unknown[];
           namedEntries.set(`${contractName}\0${soliditySource}`, {
             contractName,
             constructorInputs,
@@ -79,7 +67,7 @@ export function transformSolTemplates(
           });
         }
 
-        const replacement = `__InlineContract.fromArtifacts(${JSON.stringify(contractName)}, ${JSON.stringify(artifacts)})`;
+        const replacement = `new __InlineContract(${JSON.stringify(contractName)}, ${JSON.stringify(artifacts)})`;
         s.overwrite(node.getStart(sourceFile), node.getEnd(), replacement);
         hasReplacements = true;
         return; // Don't visit children
