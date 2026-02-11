@@ -21,6 +21,7 @@ export default defineConfig([
       rollup: 'src/bundler/rollup.ts',
       esbuild: 'src/bundler/esbuild.ts',
       webpack: 'src/bundler/webpack.ts',
+      loader: 'src/bundler/loader.ts',
     },
     format: ['esm', 'cjs'],
     shims: true,

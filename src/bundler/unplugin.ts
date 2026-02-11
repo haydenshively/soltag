@@ -1,13 +1,9 @@
-import * as fs from "fs";
-import * as path from "path";
-
 import MagicString from "magic-string";
 import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
 import { extractTemplateSource, isSolTag } from "../ast-utils.js";
-import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "../codegen.js";
-import { compileCached, compileToArtifacts, getConstructorInputs, getContractAbi } from "../solc.js";
+import { compileToArtifacts } from "../solc.js";
 
 export interface SoltagPluginOptions {
   /** Extra file extensions to include. Defaults to ['.ts', '.tsx', '.mts', '.cts'] */
@@ -25,12 +21,11 @@ export interface SoltagPluginOptions {
 }
 
 /**
- * Core transform logic, exported for testing.
+ * Core transform logic, exported for testing and the standalone webpack loader.
  */
 export function transformSolTemplates(
   code: string,
   id: string,
-  namedEntries?: Map<string, ContractTypeEntry>,
   options?: SoltagPluginOptions,
 ): { code: string; map: ReturnType<MagicString["generateMap"]> } | undefined {
   // Regex fast-path: skip parsing if "sol" tag isn't present
@@ -45,7 +40,6 @@ export function transformSolTemplates(
     if (ts.isTaggedTemplateExpression(node)) {
       const solTag = isSolTag(ts, node.tag);
       if (solTag) {
-        const contractName = solTag.contractName;
         const soliditySource = extractTemplateSource(ts, node.template, sourceFile);
 
         if (soliditySource === undefined) {
@@ -55,19 +49,7 @@ export function transformSolTemplates(
 
         const artifacts = compileToArtifacts(soliditySource, options?.solc);
 
-        // Collect named entries for .d.ts generation
-        if (namedEntries != null) {
-          const rawOutput = compileCached(soliditySource, options?.solc); // cached, no extra work
-          const constructorInputs = getConstructorInputs(rawOutput, contractName);
-          const abi = (getContractAbi(rawOutput, contractName) ?? []) as unknown[];
-          namedEntries.set(`${contractName}\0${soliditySource}`, {
-            contractName,
-            constructorInputs,
-            abi,
-          });
-        }
-
-        const replacement = `new __InlineContract(${JSON.stringify(contractName)}, ${JSON.stringify(artifacts)})`;
+        const replacement = `new __InlineContract(${JSON.stringify(solTag.contractName)}, ${JSON.stringify(artifacts)})`;
         s.overwrite(node.getStart(sourceFile), node.getEnd(), replacement);
         hasReplacements = true;
         return; // Don't visit children
@@ -93,22 +75,9 @@ export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
   const include = options?.include ?? [".ts", ".tsx", ".mts", ".cts"];
   const exclude = options?.exclude ?? [/node_modules/];
 
-  const namedEntries = new Map<string, ContractTypeEntry>();
-  let rootDir: string | undefined;
-
   return {
     name: "soltag",
     enforce: "pre" as const,
-
-    vite: {
-      configResolved(config) {
-        rootDir = config.root;
-      },
-    },
-
-    buildStart() {
-      namedEntries.clear();
-    },
 
     transform: {
       filter: {
@@ -118,44 +87,8 @@ export const unplugin = createUnplugin((options?: SoltagPluginOptions) => {
         },
       },
       handler(code: string, id: string) {
-        if (!rootDir) {
-          rootDir = process.cwd();
-        }
-        return transformSolTemplates(code, id, namedEntries, options);
+        return transformSolTemplates(code, id, options);
       },
-    },
-
-    buildEnd() {
-      if (!rootDir || namedEntries.size === 0) return;
-
-      const entries = Array.from(namedEntries.values());
-      const { content, duplicates } = generateDeclarationContent(entries);
-
-      for (const name of duplicates) {
-        console.warn(
-          `[soltag] Multiple contracts named "${name}" with different definitions exist in this project. Only the first definition will be used for type generation.`,
-        );
-      }
-
-      if (content === "") return;
-
-      const typesDir = path.join(rootDir, SOLTAG_DIR);
-      const typesFile = path.join(typesDir, SOLTAG_TYPES_FILE);
-
-      if (!fs.existsSync(typesDir)) {
-        fs.mkdirSync(typesDir, { recursive: true });
-      }
-
-      let existing: string | undefined;
-      try {
-        existing = fs.readFileSync(typesFile, "utf-8");
-      } catch {
-        // File doesn't exist yet
-      }
-
-      if (existing !== content) {
-        fs.writeFileSync(typesFile, content, "utf-8");
-      }
     },
   };
 });

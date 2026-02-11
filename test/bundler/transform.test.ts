@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { transformSolTemplates } from "../../src/bundler/unplugin.js";
-import type { ContractTypeEntry } from "../../src/codegen.js";
 
 describe("unplugin transform", () => {
   it("returns undefined for files without sol(", () => {
@@ -187,55 +186,5 @@ const contract = sol("X")\`
 
     // let is not const, so it can't be resolved at build time
     expect(result).toBeUndefined();
-  });
-
-  // --- Entry collection for .d.ts generation ---
-
-  it("collects named entries when namedEntries map is provided", () => {
-    const entries = new Map<string, ContractTypeEntry>();
-    const input = `
-const contract = sol("Greeter")\`
-  // SPDX-License-Identifier: MIT
-  pragma solidity ^0.8.24;
-  contract Greeter {
-    function greet() external pure returns (string memory) {
-      return "hello";
-    }
-  }
-\`;
-`;
-    transformSolTemplates(input, "test.ts", entries);
-
-    expect(entries.size).toBe(1);
-    const entry = Array.from(entries.values())[0];
-    expect(entry.contractName).toBe("Greeter");
-    // Greeter has no constructor, so constructorInputs should be empty
-    expect(entry.constructorInputs).toHaveLength(0);
-    // ABI should be collected
-    expect(entry.abi).toBeInstanceOf(Array);
-    expect(entry.abi.length).toBeGreaterThan(0);
-  });
-
-  it("collects constructor inputs for contracts with constructors", () => {
-    const entries = new Map<string, ContractTypeEntry>();
-    const input = `
-const contract = sol("MyToken")\`
-  // SPDX-License-Identifier: MIT
-  pragma solidity ^0.8.24;
-  contract MyToken {
-    uint256 public supply;
-    constructor(uint256 _supply) {
-      supply = _supply;
-    }
-  }
-\`;
-`;
-    transformSolTemplates(input, "test.ts", entries);
-
-    expect(entries.size).toBe(1);
-    const entry = Array.from(entries.values())[0];
-    expect(entry.contractName).toBe("MyToken");
-    expect(entry.constructorInputs).toHaveLength(1);
-    expect(entry.constructorInputs[0].type).toBe("uint256");
   });
 });
