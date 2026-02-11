@@ -1,6 +1,6 @@
 {
   "name": "soltag",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Inline Solidity tagged template for TypeScript with IDE type inference",
   "license": "MIT",
   "keywords": [
@@ -23,22 +23,27 @@
     },
     "./unplugin": {
       "types": "./dist/unplugin.d.ts",
+      "require": "./dist/unplugin.cjs",
       "import": "./dist/unplugin.js"
     },
     "./vite": {
       "types": "./dist/vite.d.ts",
+      "require": "./dist/vite.cjs",
       "import": "./dist/vite.js"
     },
     "./rollup": {
       "types": "./dist/rollup.d.ts",
+      "require": "./dist/rollup.cjs",
       "import": "./dist/rollup.js"
     },
     "./esbuild": {
       "types": "./dist/esbuild.d.ts",
+      "require": "./dist/esbuild.cjs",
       "import": "./dist/esbuild.js"
     },
     "./webpack": {
       "types": "./dist/webpack.d.ts",
+      "require": "./dist/webpack.cjs",
       "import": "./dist/webpack.js"
     }
   },
