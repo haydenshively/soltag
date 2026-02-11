@@ -1,8 +1,59 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
+import { resolveStringExpression, type TsModule } from "../ast-utils.js";
+
 import { findSolTemplateLiterals } from "./analysis.js";
 import { compileCached, type SolcStandardOutput } from "./solc-cache.js";
 import { isDuplicateContractName } from "./typegen.js";
+
+/**
+ * Map a position in the compiled Solidity source back to the corresponding
+ * position in the editor's template literal, accounting for interpolations
+ * whose resolved text may be longer or shorter than the `${expr}` syntax.
+ */
+function mapCompiledPosToEditor(
+  ts: typeof tslib,
+  template: tslib.TemplateLiteral,
+  sourceFile: tslib.SourceFile,
+  compiledPos: number,
+  side: "start" | "end",
+): number {
+  // No interpolations — compiled source is a 1:1 match with the template text
+  if (ts.isNoSubstitutionTemplateLiteral(template)) {
+    return template.getStart(sourceFile) + 1 + compiledPos; // +1 for backtick
+  }
+
+  // TemplateExpression: walk head + spans, tracking compiled offset
+  const expr = template as tslib.TemplateExpression;
+  let compiledOffset = 0;
+
+  // Head text region (1:1 with editor)
+  const headLen = expr.head.text.length;
+  if (compiledPos < compiledOffset + headLen) {
+    return expr.head.getStart(sourceFile) + 1 + (compiledPos - compiledOffset);
+  }
+  compiledOffset += headLen;
+
+  for (const span of expr.templateSpans) {
+    // Resolved expression region — map to the expression node in the editor
+    const resolved = resolveStringExpression(ts as unknown as TsModule, span.expression, sourceFile);
+    const resolvedLen = resolved?.length ?? 0;
+    if (compiledPos < compiledOffset + resolvedLen) {
+      return side === "start" ? span.expression.getStart(sourceFile) : span.expression.getEnd();
+    }
+    compiledOffset += resolvedLen;
+
+    // Literal text region after expression (1:1 with editor)
+    const litLen = span.literal.text.length;
+    if (compiledPos < compiledOffset + litLen) {
+      return span.literal.getStart(sourceFile) + 1 + (compiledPos - compiledOffset);
+    }
+    compiledOffset += litLen;
+  }
+
+  // Past the end — return end of template
+  return template.getEnd() - 1;
+}
 
 export function createGetSemanticDiagnostics(
   ts: typeof tslib,
@@ -80,12 +131,10 @@ export function createGetSemanticDiagnostics(
         let length = literal.end - literal.pos;
 
         if (error.sourceLocation && error.sourceLocation.file === "inline.sol") {
-          // Find the template content start position
-          // The template literal starts after the tag and backtick
           const templateNode = literal.node.template;
-          const contentStart = templateNode.getStart(sourceFile) + 1; // +1 for backtick
-          start = contentStart + error.sourceLocation.start;
-          length = error.sourceLocation.end - error.sourceLocation.start;
+          start = mapCompiledPosToEditor(ts, templateNode, sourceFile, error.sourceLocation.start, "start");
+          const end = mapCompiledPosToEditor(ts, templateNode, sourceFile, error.sourceLocation.end, "end");
+          length = Math.max(end - start, 1);
         }
 
         solDiagnostics.push({
