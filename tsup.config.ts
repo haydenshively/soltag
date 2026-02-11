@@ -24,6 +24,6 @@ export default defineConfig([
     format: ['esm'],
     dts: true,
     sourcemap: true,
-    external: ['solc', 'viem', 'unplugin', 'magic-string', 'typescript'],
+    external: ['solc', 'viem', 'typescript'],
   },
 ]);

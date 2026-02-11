@@ -34,19 +34,7 @@ lens.bytecode();       // `0x${string}` (creation bytecode)
 ## Install
 
 ```sh
-pnpm add soltag viem
-```
-
-For **runtime compilation** (scripts, REPLs, testing), also install `solc`:
-
-```sh
-pnpm add solc
-```
-
-For the **bundler plugin** (recommended for apps), install `solc` as a dev dependency along with `unplugin` and `magic-string`:
-
-```sh
-pnpm add -D solc unplugin magic-string
+pnpm add soltag viem solc
 ```
 
 > **Note on `pragma solidity`:** The pragma in your Solidity source is a compatibility constraint checked by solc at compile time — it doesn't select a compiler version. As long as your installed `solc` version satisfies the pragma range (e.g. solc 0.8.28 satisfies `^0.8.24`), compilation proceeds. If it doesn't, solc will reject it with an error.
@@ -94,6 +82,10 @@ Add to your `tsconfig.json` for inline Solidity diagnostics and contract-name va
 
 > VS Code users: make sure your workspace is using the TypeScript version from `node_modules` (not the built-in one). Open a `.ts` file, click the TypeScript version in the bottom status bar, and select "Use Workspace Version".
 
+### Syntax Highlighting (VS Code)
+
+For Solidity syntax highlighting inside `sol` template literals, install [soltag-highlighter](https://marketplace.visualstudio.com/items?itemName=haydenshively.soltag-highlighter).
+
 ## Usage
 
 ### Basic
@@ -137,19 +129,29 @@ token.bytecode(1000n); // creation bytecode + ABI-encoded constructor args
 
 ### Using with viem
 
-`InlineContract` is a data container — use its properties with any execution library. Here's an example with viem's `eth_call` + `stateOverride` for deployless reads:
+`InlineContract` is a data container — use its properties with any execution library. Here are examples using viem.
+
+#### Deployless read via `stateOverride`
+
+Inject an undeployed contract's code at its deterministic address to read on-chain state without deploying:
 
 ```ts
-import { createPublicClient, http, decodeFunctionResult, encodeFunctionData } from 'viem';
+import { createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
 import { sol } from 'soltag';
 
 const client = createPublicClient({ chain: mainnet, transport: http() });
 
-const lens = sol("Lens")`
+const IERC20 = `
+  interface IERC20 {
+    function balanceOf(address) external view returns (uint256);
+  }
+`;
+
+const lens = sol("BalanceLens")`
   pragma solidity ^0.8.24;
-  interface IERC20 { function balanceOf(address) external view returns (uint256); }
-  contract Lens {
+  ${IERC20}
+  contract BalanceLens {
     function getBalance(address token, address user)
       external view returns (uint256)
     {
@@ -158,18 +160,69 @@ const lens = sol("Lens")`
   }
 `;
 
-const data = encodeFunctionData({
+// NOTE: Works with multicall!
+const balance = await client.readContract({
+  address: lens.address,
   abi: lens.abi,
   functionName: 'getBalance',
-  args: [USDC, user],
+  args: [USDC, userAddress],
+  stateOverride: [lens.stateOverride],
 });
+```
 
-const result = await client.call({
-  to: lens.address,
-  data,
-  stateOverrides: [{
-    address: lens.address,
-    code: lens.deployedBytecode,
+#### Deployless read with constructor args
+
+For contracts that use `immutable` variables (assigned in the constructor), use viem's `factory` and `factoryData` instead of `stateOverride` (see [Immutables Caveat](#immutables-caveat)):
+
+```ts
+import { sol, CREATE2_FACTORY } from 'soltag';
+
+const lens = sol("Aggregator")`
+  pragma solidity ^0.8.24;
+  contract Aggregator {
+    uint256 public immutable threshold;
+    constructor(uint256 _threshold) {
+      threshold = _threshold;
+    }
+    function check(uint256 value) external view returns (bool) {
+      return value >= threshold;
+    }
+  }
+`;
+
+// NOTE: Multicall won't work this way.
+const result = await client.readContract({
+  address: lens.address,
+  abi: lens.abi,
+  functionName: 'check',
+  args: [100n],
+  factory: CREATE2_FACTORY,
+  factoryData: lens.bytecode(50n),
+});
+```
+
+#### Overriding an existing contract
+
+Inject replacement code at an existing deployed contract's address — useful for adding or modifying view functions:
+
+```ts
+const mockToken = sol("MockToken")`
+  pragma solidity ^0.8.24;
+  contract MockToken {
+    function balanceOf(address) external pure returns (uint256) {
+      return 1_000_000e18;
+    }
+  }
+`;
+
+const balance = await client.readContract({
+  address: USDC,
+  abi: mockToken.abi,
+  functionName: 'balanceOf',
+  args: [userAddress],
+  stateOverride: [{
+    address: USDC,
+    code: mockToken.deployedBytecode,
   }],
 });
 ```
@@ -201,22 +254,6 @@ const balanceLens = sol("BalanceLens")`
 ```
 
 The bundler plugin resolves `const` string interpolations at build time, so these templates are still compiled ahead of time. Interpolations that can't be statically resolved (e.g. variables from function calls) are left for runtime compilation.
-
-### Pre-compiled artifacts
-
-For environments where you want full control over the compilation step:
-
-```ts
-import { InlineContract } from 'soltag';
-
-const contract = InlineContract.fromArtifacts("MyContract", {
-  MyContract: {
-    abi: [/* ... */],
-    deployedBytecode: '0x...',
-    bytecode: '0x...',
-  },
-});
-```
 
 ## How It Works
 
@@ -288,7 +325,3 @@ class InlineContract<TName extends string = string> {
 ### `SolCompilationError`
 
 Thrown when Solidity compilation fails. Contains a `.errors` array of `SolcDiagnostic` objects with severity, message, and source location.
-
-## License
-
-MIT
