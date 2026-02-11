@@ -25,6 +25,6 @@ export default defineConfig([
     shims: true,
     dts: true,
     sourcemap: true,
-    external: ['solc', 'viem', 'typescript'],
+    external: ['solc', 'viem', 'typescript', 'unplugin'],
   },
 ]);
