@@ -3,23 +3,10 @@
  * the bundler plugin and the LS / editor plugin.
  */
 
+import solc from "solc";
 import type { Abi, Hex } from "viem";
 
 import type { CompilationResult } from "./index.js";
-
-let solcInstance: { compile(input: string): string } | undefined;
-
-function getSolc() {
-  if (!solcInstance) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      solcInstance = require("solc") as typeof solcInstance;
-    } catch {
-      throw new Error("soltag: solc is not installed. Install it (`pnpm add solc`) for compilation.");
-    }
-  }
-  return solcInstance!;
-}
 
 export interface SolcInputOptions {
   optimizer?: {
@@ -98,7 +85,6 @@ export function compileCached(source: string, options?: SolcInputOptions): SolcS
   const existing = cache.get(key);
   if (existing) return existing;
 
-  const solc = getSolc();
   const input = buildSolcInput(source, options);
   const rawOutput = solc.compile(JSON.stringify(input));
   const output = JSON.parse(rawOutput) as SolcStandardOutput;

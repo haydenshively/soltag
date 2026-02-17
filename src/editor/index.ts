@@ -11,6 +11,9 @@ function init(modules: { typescript: typeof tslib }) {
 
   let pluginInfo: tslib.server.PluginCreateInfo;
   let projectDirectory: string;
+  let cachedExternalFiles: string[] = [];
+  let lastRegenerate = 0;
+  const REGENERATE_INTERVAL_MS = 1000;
 
   function create(info: tslib.server.PluginCreateInfo) {
     info.project.projectService.logger.info("soltag plugin loaded");
@@ -34,10 +37,17 @@ function init(modules: { typescript: typeof tslib }) {
   function getExternalFiles(_project: tslib.server.Project, _updateLevel: tslib.ProgramUpdateLevel): string[] {
     if (!pluginInfo) return [];
 
-    regenerateTypesFile(ts, pluginInfo, projectDirectory);
+    const now = Date.now();
 
-    const typesFile = getTypesFilePath(projectDirectory);
-    return fs.existsSync(typesFile) ? [typesFile] : [];
+    // Only regenerate types file at most once per second
+    if (now - lastRegenerate > REGENERATE_INTERVAL_MS) {
+      regenerateTypesFile(ts, pluginInfo, projectDirectory);
+      const typesFile = getTypesFilePath(projectDirectory);
+      cachedExternalFiles = fs.existsSync(typesFile) ? [typesFile] : [];
+      lastRegenerate = now;
+    }
+
+    return cachedExternalFiles;
   }
 
   return { create, getExternalFiles };
