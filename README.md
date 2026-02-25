@@ -82,6 +82,15 @@ Add to your `tsconfig.json` for inline Solidity diagnostics and contract-name va
 
 > VS Code users: make sure your workspace is using the TypeScript version from `node_modules` (not the built-in one). Open a `.ts` file, click the TypeScript version in the bottom status bar, and select "Use Workspace Version".
 
+### CLI (CI type generation)
+
+The TypeScript plugin generates `.soltag/types.d.ts` automatically in the IDE, but CI environments don't run `tsserver`. Use the CLI to generate the same file so that `tsc --noEmit` gets full type narrowing:
+
+```sh
+soltag              # uses tsconfig.json in cwd
+soltag -p ./path    # uses a specific tsconfig.json
+```
+
 ### Syntax Highlighting (VS Code)
 
 For Solidity syntax highlighting inside `sol` template literals, install [soltag-highlighter](https://marketplace.visualstudio.com/items?itemName=haydenshively.soltag-highlighter).

@@ -10,6 +10,13 @@ export default defineConfig([
     external: ['viem'],
   },
   {
+    entry: { cli: 'src/cli.ts' },
+    format: ['esm'],
+    sourcemap: true,
+    banner: { js: '#!/usr/bin/env node' },
+    external: ['solc', 'typescript'],
+  },
+  {
     entry: { plugin: 'src/editor/index.ts' },
     format: ['cjs'],
     sourcemap: true,
