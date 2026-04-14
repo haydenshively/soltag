@@ -1,11 +1,4 @@
-import {
-  type Abi,
-  type Address,
-  encodeAbiParameters,
-  getContractAddress,
-  type Hex,
-  zeroAddress,
-} from "viem";
+import { type Abi, type Address, encodeAbiParameters, getContractAddress, type Hex, zeroAddress } from "viem";
 
 export interface CompiledContract {
   abi: Abi;
