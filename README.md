@@ -1,6 +1,6 @@
 # soltag
 
-Inline Solidity in TypeScript. Write Solidity inside a tagged template literal, get a data object with typed `abi`, `bytecode()`, `deployedBytecode`, and a deterministic `address`.
+Inline Solidity in TypeScript. Write Solidity inside a tagged template literal, get a data object with typed `abi`, `bytecode()`, `deployedBytecode`, and a `with(...args)` descriptor ready to spread into viem's deployless-via-factory reads.
 
 ```ts
 import { sol } from 'soltag';
@@ -17,16 +17,16 @@ const lens = sol("Lens")`
   }
 `;
 
-lens.name;             // "Lens" (typed as literal)
-lens.abi;              // precise, as-const ABI (via generated .d.ts)
-lens.address;          // `0x${string}` (deterministic, derived from deployedBytecode)
-lens.deployedBytecode; // `0x${string}` (runtime bytecode)
-lens.bytecode();       // `0x${string}` (creation bytecode)
+lens.name;              // "Lens" (typed as literal)
+lens.abi;               // precise, as-const ABI (via generated .d.ts)
+lens.deployedBytecode;  // `0x${string}` (runtime bytecode)
+lens.bytecode();        // `0x${string}` (creation bytecode)
+lens.with();            // { address, factory, factoryData } — spreadable into viem
 ```
 
 ## Features
 
-- **`sol("Name")` tagged template** — write Solidity inline, get a `InlineContract` with typed ABI, bytecode, and a deterministic address. Supports string interpolation for composing reusable fragments
+- **`sol("Name")` tagged template** — write Solidity inline, get an `InlineContract` with typed ABI, creation bytecode, and a typed `with(...args)` descriptor that yields the CREATE2 address and factory calldata for any constructor argument set. Supports string interpolation for composing reusable fragments
 - **Real-time IDE support** — inline Solidity diagnostics and contract-name validation via a TypeScript Language Service Plugin. ABI and `bytecode()` types are provided through generated `.d.ts` augmentation
 - **Build-time compilation** — bundler plugin (Vite, Rollup, esbuild, webpack) compiles Solidity at build time so `solc` (8MB WASM) never ships to production
 - **Data-oriented** — `InlineContract` is a plain data container. Use `abi` and `bytecode` with whatever execution library you prefer (viem, ethers, etc.)
@@ -111,11 +111,11 @@ const math = sol("Math")`
   }
 `;
 
-math.name;             // "Math"
-math.abi;              // readonly [{ type: "function", name: "add", ... }]
-math.bytecode();       // creation bytecode
-math.deployedBytecode; // runtime bytecode
-math.address;          // deterministic address derived from deployedBytecode
+math.name;              // "Math"
+math.abi;               // readonly [{ type: "function", name: "add", ... }]
+math.bytecode();        // creation bytecode
+math.deployedBytecode;  // runtime bytecode
+math.with().address;    // deterministic CREATE2 address (no-arg contract)
 ```
 
 ### Constructor arguments
@@ -171,7 +171,7 @@ const lens = sol("BalanceLens")`
 
 // NOTE: Works with multicall!
 const balance = await client.readContract({
-  address: lens.address,
+  address: lens.stateOverride.address,
   abi: lens.abi,
   functionName: 'getBalance',
   args: [USDC, userAddress],
@@ -181,10 +181,10 @@ const balance = await client.readContract({
 
 #### Deployless read with constructor args
 
-For contracts that use `immutable` variables (assigned in the constructor), use viem's `factory` and `factoryData` instead of `stateOverride` (see [Immutables Caveat](#immutables-caveat)):
+For contracts that use `immutable` variables (assigned in the constructor), use viem's `factory` and `factoryData` instead of `stateOverride` (see [Immutables Caveat](#immutables-caveat)). `lens.with(...args)` returns a spreadable `{ address, factory, factoryData }` descriptor — the address is the real CREATE2 address for the given constructor args, and `factoryData` is already wrapped in the `salt || initcode` format expected by the canonical factory:
 
 ```ts
-import { sol, CREATE2_FACTORY } from 'soltag';
+import { sol } from 'soltag';
 
 const lens = sol("Aggregator")`
   pragma solidity ^0.8.24;
@@ -201,14 +201,14 @@ const lens = sol("Aggregator")`
 
 // NOTE: Multicall won't work this way.
 const result = await client.readContract({
-  address: lens.address,
   abi: lens.abi,
   functionName: 'check',
   args: [100n],
-  factory: CREATE2_FACTORY,
-  factoryData: lens.bytecode(50n),
+  ...lens.with(50n),
 });
 ```
+
+> `lens.with(...args)` is typed through the generated `.d.ts`, so the constructor arguments you pass are checked against the contract's constructor signature. For no-arg contracts, call `lens.with()` with no arguments.
 
 #### Overriding an existing contract
 
@@ -278,7 +278,7 @@ The bundler plugin resolves `const` string interpolations at build time, so thes
 
 1. The TS plugin runs in `tsserver` (your editor's TypeScript process)
 2. It finds `sol("Name")` tagged templates, compiles them with solc-js, and extracts the ABI
-3. Generates `.soltag/types.d.ts` with module augmentation that narrows `abi` to precise "as const" types and adds typed `bytecode()` overloads per contract
+3. Generates `.soltag/types.d.ts` with module augmentation that narrows `abi` to precise "as const" types and types `bytecode(...)` / `with(...)` constructor arguments per contract
 4. Reports inline Solidity compilation errors and warns if the contract name doesn't match any contract in the source
 
 ## Immutables Caveat
@@ -287,7 +287,9 @@ Solidity `immutable` variables are assigned in the constructor and baked into th
 
 This means **`deployedBytecode` is unsuitable for `stateOverride` injection** when the contract uses immutable variables. The zeroed slots will cause the contract to behave incorrectly.
 
-If your contract uses immutables, deploy it normally using `bytecode(…constructorArgs)` instead of injecting `deployedBytecode` via `stateOverride`. Note that `bytecode()` returns _creation_ bytecode (the code that runs the constructor and returns the final runtime code), not runtime bytecode with constructor args spliced in — there is no way to produce correct runtime bytecode with immutables without actually executing the constructor.
+If your contract uses immutables or otherwise depends on constructor arguments, use `with(...constructorArgs)` instead of `stateOverride`. `with(...)` derives the correct CREATE2 address for the fully-encoded initcode and returns the `{ address, factory, factoryData }` tuple that viem expects for a deployless call via the canonical CREATE2 factory, so the constructor runs as part of that counterfactual deployment path.
+
+`bytecode(...constructorArgs)` still returns the raw creation bytecode with ABI-encoded constructor args appended, but it is lower-level than most callers need. `with(...)` is the higher-level API for viem because it packages that initcode together with the matching address and factory calldata.
 
 ## API
 
@@ -313,13 +315,18 @@ class InlineContract<TName extends string = string> {
   // Runtime bytecode as emitted by solc (see Immutables Caveat)
   get deployedBytecode(): Hex;
 
-  // Deterministic address derived from CREATE2(bytecode)
-  get address(): Address;
-
-  // Convenience object for viem's stateOverride parameter
+  // Convenience object for viem's stateOverride parameter. The address is the
+  // no-args CREATE2 address; this is only meaningful for contracts that don't
+  // take constructor args (see Immutables Caveat). Use `with(...)` otherwise.
   get stateOverride(): { address: Address; code: Hex };
 
   // Creation bytecode, optionally with ABI-encoded constructor args appended
   bytecode(...args: unknown[]): Hex;
+
+  // Spreadable { address, factory, factoryData } for viem's deployless-via-factory
+  // read pattern. The address is correct for any contract — it's derived from the
+  // creation bytecode with encoded args appended. `factoryData` is pre-wrapped in
+  // the `salt || initcode` format the canonical CREATE2 factory expects.
+  with(...args: unknown[]): { address: Address; factory: Address; factoryData: Hex };
 }
 ```

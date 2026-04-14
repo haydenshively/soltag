@@ -1,4 +1,11 @@
-import { type Abi, type Address, encodeAbiParameters, getContractAddress, type Hex, zeroAddress } from "viem";
+import {
+  type Abi,
+  type Address,
+  encodeAbiParameters,
+  getContractAddress,
+  type Hex,
+  zeroAddress,
+} from "viem";
 
 export interface CompiledContract {
   abi: Abi;
@@ -12,6 +19,27 @@ export type CompilationResult = Record<string, CompiledContract>;
 
 export const CREATE2_FACTORY: Address = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
 export const CREATE2_SALT: Hex = `${zeroAddress}51A1E51A1E51A1E51A1E51A1`;
+
+/**
+ * Spreadable descriptor returned by {@link InlineContract.with}. The keys
+ * match viem's deployless-via-factory parameters (`address`, `factory`,
+ * `factoryData`), so callers can spread the object straight into
+ * `readContract` / `simulateContract`:
+ *
+ * ```ts
+ * await readContract(client, {
+ *   abi: lens.abi,
+ *   functionName: 'query',
+ *   args: [ids],
+ *   ...lens.with(morpho, irm),
+ * });
+ * ```
+ */
+export interface DeploylessCall {
+  address: Address;
+  factory: Address;
+  factoryData: Hex;
+}
 
 /**
  * Augment this interface via module augmentation to narrow the `abi` getter
@@ -45,7 +73,6 @@ export function sol<TName extends string>(
 export class InlineContract<TName extends string = string> {
   private _name: TName;
   private _contract: CompiledContract;
-  private _address: Address | undefined;
 
   constructor(name: TName, artifacts: CompilationResult) {
     this._name = name;
@@ -74,34 +101,27 @@ export class InlineContract<TName extends string = string> {
    * constructor runs and writes them into the runtime code). This means
    * `deployedBytecode` is unsuitable for `stateOverride` injection when the
    * contract relies on immutables — the zeroed slots will cause unexpected
-   * behavior. In those cases, use `bytecode(…constructorArgs)` to get the
-   * creation bytecode and deploy the contract normally instead.
+   * behavior. In those cases, use {@link with} to deploy the contract via
+   * the canonical CREATE2 factory instead.
    */
   get deployedBytecode(): Hex {
     return this._contract.deployedBytecode;
   }
 
-  get address(): Address {
-    if (!this._address) {
-      this._address = getContractAddress({
-        bytecode: this._contract.bytecode,
-        from: CREATE2_FACTORY,
-        opcode: "CREATE2",
-        salt: CREATE2_SALT,
-      });
-    }
-    return this._address;
-  }
-
   /**
-   * Convenience object for use with viem's `stateOverride` parameter.
-   *
-   * **Immutables caveat:** same as {@link deployedBytecode} — if the contract
-   * declares `immutable` variables assigned in the constructor, the slots will
-   * contain placeholder zeros and the override will not behave correctly.
+   * Convenience object for use with viem's `stateOverride` parameter. The
+   * address is the deterministic CREATE2 address for the **no-args** creation
+   * bytecode, which is the only case where a `stateOverride` injection is
+   * meaningful — contracts that take constructor args rely on
+   * `deployedBytecode`, which solc emits with placeholder zeros in immutable
+   * slots (see the immutables caveat on {@link deployedBytecode}). Use
+   * {@link with} for those.
    */
   get stateOverride(): { address: Address; code: Hex } {
-    return { address: this.address, code: this.deployedBytecode };
+    return {
+      address: computeCreate2Address(this._contract.bytecode),
+      code: this._contract.deployedBytecode,
+    };
   }
 
   bytecode(
@@ -124,4 +144,46 @@ export class InlineContract<TName extends string = string> {
     const encoded = encodeAbiParameters(constructorAbi.inputs, args);
     return `${this._contract.bytecode}${encoded.slice(2)}` as Hex;
   }
+
+  /**
+   * Descriptor for a deployless read via the canonical CREATE2 factory, with
+   * constructor arguments narrowly typed through
+   * {@link InlineContractConstructorArgsMap}. Returns an object whose keys
+   * match viem's `{ address, factory, factoryData }` so it can be spread
+   * straight into `readContract`:
+   *
+   * ```ts
+   * await readContract(client, {
+   *   abi: lens.abi,
+   *   functionName: 'query',
+   *   args: [ids],
+   *   ...lens.with(morpho, irm),
+   * });
+   * ```
+   *
+   * The address returned here is the deterministic CREATE2 address derived
+   * from the creation bytecode **with the encoded args appended**, so it is
+   * correct for contracts with a non-empty constructor (unlike
+   * `stateOverride.address`, which uses the no-args creation bytecode and is
+   * only meaningful for contracts that don't take constructor args).
+   */
+  with(
+    ...args: TName extends keyof InlineContractConstructorArgsMap ? InlineContractConstructorArgsMap[TName] : unknown[]
+  ): DeploylessCall {
+    const initcode = this.bytecode(...(args as Parameters<InlineContract<TName>["bytecode"]>));
+    return {
+      address: computeCreate2Address(initcode),
+      factory: CREATE2_FACTORY,
+      factoryData: `${CREATE2_SALT}${initcode.slice(2)}` as Hex,
+    };
+  }
+}
+
+function computeCreate2Address(initcode: Hex): Address {
+  return getContractAddress({
+    bytecode: initcode,
+    from: CREATE2_FACTORY,
+    opcode: "CREATE2",
+    salt: CREATE2_SALT,
+  });
 }
