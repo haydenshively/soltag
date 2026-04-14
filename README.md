@@ -21,7 +21,7 @@ lens.name;              // "Lens" (typed as literal)
 lens.abi;               // precise, as-const ABI (via generated .d.ts)
 lens.deployedBytecode;  // `0x${string}` (runtime bytecode)
 lens.bytecode();        // `0x${string}` (creation bytecode)
-lens.with();            // { address, factory, factoryData } — spreadable into viem
+lens.with();            // { abi, address, factory, factoryData } — spreadable into viem
 ```
 
 ## Features
@@ -181,7 +181,7 @@ const balance = await client.readContract({
 
 #### Deployless read with constructor args
 
-For contracts that use `immutable` variables (assigned in the constructor), use viem's `factory` and `factoryData` instead of `stateOverride` (see [Immutables Caveat](#immutables-caveat)). `lens.with(...args)` returns a spreadable `{ address, factory, factoryData }` descriptor — the address is the real CREATE2 address for the given constructor args, and `factoryData` is already wrapped in the `salt || initcode` format expected by the canonical factory:
+For contracts that use `immutable` variables (assigned in the constructor), use viem's `factory` and `factoryData` instead of `stateOverride` (see [Immutables Caveat](#immutables-caveat)). `lens.with(...args)` returns a spreadable `{ abi, address, factory, factoryData }` descriptor — the address is the real CREATE2 address for the given constructor args, and `factoryData` is already wrapped in the `salt || initcode` format expected by the canonical factory:
 
 ```ts
 import { sol } from 'soltag';
@@ -201,7 +201,6 @@ const lens = sol("Aggregator")`
 
 // NOTE: Multicall won't work this way.
 const result = await client.readContract({
-  abi: lens.abi,
   functionName: 'check',
   args: [100n],
   ...lens.with(50n),

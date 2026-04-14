@@ -15,20 +15,20 @@ export const CREATE2_SALT: Hex = `${zeroAddress}51A1E51A1E51A1E51A1E51A1`;
 
 /**
  * Spreadable descriptor returned by {@link InlineContract.with}. The keys
- * match viem's deployless-via-factory parameters (`address`, `factory`,
+ * match viem's deployless-via-factory parameters (`abi`, `address`, `factory`,
  * `factoryData`), so callers can spread the object straight into
  * `readContract` / `simulateContract`:
  *
  * ```ts
  * await readContract(client, {
- *   abi: lens.abi,
  *   functionName: 'query',
  *   args: [ids],
  *   ...lens.with(morpho, irm),
  * });
  * ```
  */
-export interface DeploylessCall {
+export interface DeploylessCall<TAbi extends Abi = Abi> {
+  abi: TAbi;
   address: Address;
   factory: Address;
   factoryData: Hex;
@@ -142,12 +142,11 @@ export class InlineContract<TName extends string = string> {
    * Descriptor for a deployless read via the canonical CREATE2 factory, with
    * constructor arguments narrowly typed through
    * {@link InlineContractConstructorArgsMap}. Returns an object whose keys
-   * match viem's `{ address, factory, factoryData }` so it can be spread
+   * match viem's `{ abi, address, factory, factoryData }` so it can be spread
    * straight into `readContract`:
    *
    * ```ts
    * await readContract(client, {
-   *   abi: lens.abi,
    *   functionName: 'query',
    *   args: [ids],
    *   ...lens.with(morpho, irm),
@@ -162,9 +161,10 @@ export class InlineContract<TName extends string = string> {
    */
   with(
     ...args: TName extends keyof InlineContractConstructorArgsMap ? InlineContractConstructorArgsMap[TName] : unknown[]
-  ): DeploylessCall {
+  ): DeploylessCall<TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] & Abi : Abi> {
     const initcode = this.bytecode(...(args as Parameters<InlineContract<TName>["bytecode"]>));
     return {
+      abi: this._contract.abi as TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] & Abi : Abi,
       address: computeCreate2Address(initcode),
       factory: CREATE2_FACTORY,
       factoryData: `${CREATE2_SALT}${initcode.slice(2)}` as Hex,
