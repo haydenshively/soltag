@@ -27,7 +27,7 @@ export const CREATE2_SALT: Hex = `${zeroAddress}51A1E51A1E51A1E51A1E51A1`;
  * });
  * ```
  */
-export interface DeploylessCall<TAbi extends Abi = Abi> {
+export interface DeploylessCall<TAbi = Abi> {
   abi: TAbi;
   address: Address;
   factory: Address;
@@ -161,10 +161,10 @@ export class InlineContract<TName extends string = string> {
    */
   with(
     ...args: TName extends keyof InlineContractConstructorArgsMap ? InlineContractConstructorArgsMap[TName] : unknown[]
-  ): DeploylessCall<TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] & Abi : Abi> {
+  ): DeploylessCall<TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] : Abi> {
     const initcode = this.bytecode(...(args as Parameters<InlineContract<TName>["bytecode"]>));
     return {
-      abi: this._contract.abi as TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] & Abi : Abi,
+      abi: this._contract.abi as TName extends keyof InlineContractAbiMap ? InlineContractAbiMap[TName] : Abi,
       address: computeCreate2Address(initcode),
       factory: CREATE2_FACTORY,
       factoryData: `${CREATE2_SALT}${initcode.slice(2)}` as Hex,

@@ -1,6 +1,6 @@
 {
   "name": "soltag",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Inline Solidity tagged template for TypeScript with IDE type inference",
   "license": "MIT",
   "keywords": [
