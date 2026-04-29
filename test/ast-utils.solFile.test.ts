@@ -202,6 +202,106 @@ describe("solFile resolution", () => {
     expect(resolveStringExpression(ts, call!, sourceFile)).toBeUndefined();
   });
 
+  describe("bare specifiers (workspace packages)", () => {
+    function writeWorkspacePackage(args: {
+      pkgRoot: string;
+      pkgName: string;
+      solFiles: Record<string, string>;
+      exports?: Record<string, string>;
+    }): void {
+      fs.mkdirSync(path.join(args.pkgRoot, "solidity"), { recursive: true });
+      const exportsMap = args.exports ?? { "./solidity/*.sol": "./solidity/*.sol" };
+      fs.writeFileSync(
+        path.join(args.pkgRoot, "package.json"),
+        JSON.stringify({ name: args.pkgName, version: "0.0.0", exports: exportsMap }),
+        "utf-8",
+      );
+      for (const [name, contents] of Object.entries(args.solFiles)) {
+        fs.writeFileSync(path.join(args.pkgRoot, "solidity", name), contents, "utf-8");
+      }
+    }
+
+    it("resolves a bare specifier via the package's exports subpath pattern", () => {
+      const pkgRoot = path.join(tmpDir, "node_modules", "@repo", "contracts");
+      writeWorkspacePackage({
+        pkgRoot,
+        pkgName: "@repo/contracts",
+        solFiles: {
+          "IVault.sol":
+            "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\ninterface IVault { function totalAssets() external view returns (uint256); }\n",
+        },
+      });
+
+      const tsFile = path.join(tmpDir, "src", "lens.ts");
+      fs.mkdirSync(path.dirname(tsFile));
+      const code = `const x = solFile("@repo/contracts/solidity/IVault.sol");`;
+      const sourceFile = createSourceFile(code, tsFile);
+      const call = findFirstCallTo("solFile", sourceFile);
+
+      const resolved = resolveStringExpression(ts, call!, sourceFile);
+      expect(resolved).toContain("interface IVault");
+      expect(resolved).not.toContain("SPDX-License-Identifier");
+      expect(resolved).not.toMatch(/^\s*pragma\s+solidity/m);
+    });
+
+    it("resolves bare specifiers across pnpm-style symlinks", () => {
+      // Real package lives at packages/contracts and is symlinked from
+      // node_modules/@repo/contracts — same shape pnpm produces.
+      const realPkgRoot = path.join(tmpDir, "packages", "contracts");
+      writeWorkspacePackage({
+        pkgRoot: realPkgRoot,
+        pkgName: "@repo/contracts",
+        solFiles: {
+          "ILib.sol": "library L {}\n",
+        },
+      });
+
+      const linkParent = path.join(tmpDir, "consumer", "node_modules", "@repo");
+      fs.mkdirSync(linkParent, { recursive: true });
+      fs.symlinkSync(realPkgRoot, path.join(linkParent, "contracts"), "dir");
+
+      const tsFile = path.join(tmpDir, "consumer", "src", "lens.ts");
+      fs.mkdirSync(path.dirname(tsFile), { recursive: true });
+      const code = `const x = solFile("@repo/contracts/solidity/ILib.sol");`;
+      const sourceFile = createSourceFile(code, tsFile);
+      const call = findFirstCallTo("solFile", sourceFile);
+
+      const resolved = resolveStringExpression(ts, call!, sourceFile);
+      expect(resolved).toContain("library L {}");
+    });
+
+    it("throws SolFileError when a bare specifier cannot be resolved", () => {
+      const tsFile = path.join(tmpDir, "lens.ts");
+      const code = `const x = solFile("@repo/does-not-exist/Foo.sol");`;
+      const sourceFile = createSourceFile(code, tsFile);
+      const call = findFirstCallTo("solFile", sourceFile);
+
+      try {
+        resolveStringExpression(ts, call!, sourceFile);
+        expect.fail("expected SolFileError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(SolFileError);
+        expect((err as SolFileError).specifier).toBe("@repo/does-not-exist/Foo.sol");
+        expect((err as SolFileError).node).toBe(call);
+      }
+    });
+
+    it("error message reports the original specifier, not the resolved path", () => {
+      const tsFile = path.join(tmpDir, "lens.ts");
+      const code = `const x = solFile("./missing.sol");`;
+      const sourceFile = createSourceFile(code, tsFile);
+      const call = findFirstCallTo("solFile", sourceFile);
+
+      try {
+        resolveStringExpression(ts, call!, sourceFile);
+        expect.fail("expected SolFileError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(SolFileError);
+        expect((err as SolFileError).message).toContain('solFile("./missing.sol")');
+      }
+    });
+  });
+
   it("resolves solFile inside a sol() tagged template via extractTemplateSource", () => {
     writeSolFile(
       "IFoo.sol",

@@ -46,6 +46,45 @@ const lens = sol("Lens")\`
     expect(result!.code).not.toContain("solFile(");
   });
 
+  it("resolves a bare specifier via the workspace package's exports map", () => {
+    const pkgRoot = path.join(tmpDir, "node_modules", "@repo", "contracts");
+    fs.mkdirSync(path.join(pkgRoot, "solidity"), { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgRoot, "package.json"),
+      JSON.stringify({
+        name: "@repo/contracts",
+        version: "0.0.0",
+        exports: { "./solidity/*.sol": "./solidity/*.sol" },
+      }),
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(pkgRoot, "solidity", "IERC20.sol"),
+      "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\ninterface IERC20 { function balanceOf(address) external view returns (uint256); }\n",
+      "utf-8",
+    );
+
+    const tsFile = path.join(tmpDir, "src", "lens.ts");
+    fs.mkdirSync(path.dirname(tsFile));
+    const code = `
+import { sol, solFile } from 'soltag';
+const lens = sol("Lens")\`
+  pragma solidity ^0.8.24;
+  \${solFile("@repo/contracts/solidity/IERC20.sol")}
+  contract Lens {
+    function getBalance(address token, address user) external view returns (uint256) {
+      return IERC20(token).balanceOf(user);
+    }
+  }
+\`;
+`;
+
+    const result = transformSolTemplates(code, tsFile);
+    expect(result).toBeDefined();
+    expect(result!.code).toContain('new __InlineContract("Lens",');
+    expect(result!.code).not.toContain("solFile(");
+  });
+
   it("rethrows SolFileError as a build error with file:line context", () => {
     const tsFile = path.join(tmpDir, "lens.ts");
     const code = `

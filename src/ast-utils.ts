@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { createRequire } from "module";
 import * as path from "path";
 
 import type typescript from "typescript";
@@ -23,18 +24,24 @@ export function isSolTag(ts: TS, tag: typescript.Node): { contractName: string }
 }
 
 /**
- * Thrown when a `solFile(...)` interpolation can't read the requested file.
- * Carries the call-site node so editor diagnostics can paint the squiggle on
- * the right span.
+ * Thrown when a `solFile(...)` interpolation can't read or resolve the
+ * requested file. Carries the call-site node so editor diagnostics can paint
+ * the squiggle on the right span.
+ *
+ * `filePath` is the resolved absolute path when resolution succeeded, or the
+ * original specifier when resolution itself failed (bare specifier with no
+ * matching package).
  */
 export class SolFileError extends Error {
+  readonly specifier: string;
   readonly filePath: string;
   readonly cause: NodeJS.ErrnoException;
   readonly node: typescript.Node;
 
-  constructor(args: { filePath: string; cause: NodeJS.ErrnoException; node: typescript.Node }) {
-    super(`solFile("${args.filePath}") failed: ${args.cause.message}`);
+  constructor(args: { specifier: string; filePath: string; cause: NodeJS.ErrnoException; node: typescript.Node }) {
+    super(`solFile("${args.specifier}") failed: ${args.cause.message}`);
     this.name = "SolFileError";
+    this.specifier = args.specifier;
     this.filePath = args.filePath;
     this.cause = args.cause;
     this.node = args.node;
@@ -132,14 +139,22 @@ function resolveIdentifierToString(
 }
 
 /**
- * Resolve `solFile(path, opts?)`: read the file (relative to the .ts file's
- * directory) and splice the (optionally header-stripped) contents. Returns
- * undefined if any argument can't be resolved at build time.
+ * Resolve `solFile(path, opts?)`: read the file and splice the (optionally
+ * header-stripped) contents. Returns undefined if any argument can't be
+ * resolved at build time.
+ *
+ * Path resolution:
+ * - Relative (`./` / `../`) and absolute paths resolve against the .ts file's
+ *   directory — verbatim, no package lookup.
+ * - Bare specifiers (e.g. `@repo/contracts/solidity/Foo.sol`) resolve via
+ *   Node's package resolver anchored at the .ts file, so they honor the
+ *   package's `exports` map. The target package needs to expose its `.sol`
+ *   files via an `exports` entry like `"./solidity/*.sol": "./solidity/*.sol"`.
  *
  * No caching: file reads are cheap, and re-reading on every resolution lets
  * the editor pick up `.sol` edits on its next poll without restarting.
  *
- * Throws {@link SolFileError} on file-read failure.
+ * Throws {@link SolFileError} on resolution or file-read failure.
  */
 function resolveSolFileCall(
   ts: TS,
@@ -148,8 +163,8 @@ function resolveSolFileCall(
 ): string | undefined {
   if (node.arguments.length < 1 || node.arguments.length > 2) return undefined;
 
-  const filePath = resolveStringExpression(ts, node.arguments[0], sourceFile);
-  if (filePath === undefined) return undefined;
+  const specifier = resolveStringExpression(ts, node.arguments[0], sourceFile);
+  if (specifier === undefined) return undefined;
 
   let rawOpt = false;
   if (node.arguments.length === 2) {
@@ -168,14 +183,14 @@ function resolveSolFileCall(
     }
   }
 
-  const baseDir = path.dirname(sourceFile.fileName);
-  const absPath = path.resolve(baseDir, filePath);
+  const absPath = resolveSolFileSpecifier(specifier, sourceFile.fileName, node);
 
   let contents: string;
   try {
     contents = fs.readFileSync(absPath, "utf-8");
   } catch (err) {
     throw new SolFileError({
+      specifier,
       filePath: absPath,
       cause: err as NodeJS.ErrnoException,
       node,
@@ -183,6 +198,37 @@ function resolveSolFileCall(
   }
 
   return rawOpt ? contents : stripSolidityHeader(contents);
+}
+
+/**
+ * Resolve a `solFile` specifier to an absolute path:
+ * - Bare specifiers (`pkg/...`, `@scope/pkg/...`) go through Node's CJS
+ *   resolver anchored at `sourceFileName`, so workspace packages with an
+ *   `exports` map for `.sol` subpaths work out of the box.
+ *   `require.resolve` only returns the path; it does not load the file, so
+ *   the unknown `.sol` extension never triggers a loader error.
+ * - Everything else is treated as a path resolved against the .ts file's
+ *   directory (preserves prior behavior for `./`, `../`, and absolute paths).
+ *
+ * Throws {@link SolFileError} when bare-specifier resolution fails — surfaces
+ * with the same call-site span as a file-read failure.
+ */
+function resolveSolFileSpecifier(specifier: string, sourceFileName: string, node: typescript.CallExpression): string {
+  const isBare = specifier.length > 0 && specifier[0] !== "." && specifier[0] !== "/";
+  if (!isBare) {
+    return path.resolve(path.dirname(sourceFileName), specifier);
+  }
+
+  try {
+    return createRequire(sourceFileName).resolve(specifier);
+  } catch (err) {
+    throw new SolFileError({
+      specifier,
+      filePath: specifier,
+      cause: err as NodeJS.ErrnoException,
+      node,
+    });
+  }
 }
 
 /**

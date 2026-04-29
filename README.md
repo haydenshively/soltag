@@ -283,11 +283,40 @@ const lens = sol("VaultReader")`
 `;
 ```
 
-**Paths** are resolved relative to the directory of the `.ts` file containing the `solFile` call. There is no implicit `cwd` or import-search logic — the path is what gets read.
+**Paths.** Relative (`./`, `../`) and absolute paths are resolved against the `.ts` file's directory — verbatim, no `cwd` or import-search logic. Bare specifiers (e.g. `@repo/contracts/solidity/IVault.sol`) go through Node's package resolver, so they work the same way as any other TypeScript import — see [From a workspace package](#from-a-workspace-package) below.
 
 **Pragmas.** By default, `solFile` strips the leading `// SPDX-License-Identifier` comment and `pragma solidity / abicoder / experimental` directives from the file. Your lens template owns the pragma at the top; helpers contribute contract bodies. Pass `{ raw: true }` to opt out.
 
 **Edits hot-reload.** `solFile` re-reads on every resolution, so editing an imported `.sol` file is picked up on the next editor poll without restarting tsserver, and the build sees the new content on the next compile.
+
+#### From a workspace package
+
+In a pnpm/yarn workspace where Solidity sources live in a sibling package, expose the `.sol` files via the package's `exports` map and import them by name:
+
+```jsonc
+// packages/contracts/package.json
+{
+  "name": "@repo/contracts",
+  "exports": {
+    "./solidity/*.sol": "./solidity/*.sol"
+  }
+}
+```
+
+```ts
+// apps/web/src/lens.ts
+import { sol, solFile } from 'soltag';
+
+const lens = sol("VaultReader")`
+  pragma solidity ^0.8.24;
+  ${solFile("@repo/contracts/solidity/IVault.sol")}
+  contract VaultReader { ... }
+`;
+```
+
+Resolution is anchored at the importing `.ts` file (not the build's `cwd`), so pnpm's symlinked `node_modules` and the package's `exports` map both work as expected. `require.resolve` only resolves the path — it never tries to load the `.sol` file as JavaScript, so the unknown extension is fine.
+
+> **`exports` conditions.** Resolution runs through Node's CommonJS resolver, so the `.sol` entry must match under the `require` / `default` / `node` condition set. A plain string mapping (as above) is the simplest shape and matches everywhere. Conditional objects work too as long as they include a `default` (or `require`) branch — an `import`-only branch will fail to resolve at build time with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
 #### Transitive imports (e.g. `forge flatten`)
 

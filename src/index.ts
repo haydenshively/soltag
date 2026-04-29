@@ -74,12 +74,16 @@ export interface SolFileOptions {
  * time and replaces the call with its contents (with the leading SPDX +
  * pragma block stripped by default — set `{ raw: true }` to preserve it).
  *
- * Paths are resolved relative to the `.ts` file containing the call.
+ * Relative and absolute paths are resolved against the `.ts` file's directory.
+ * Bare specifiers (e.g. `@repo/contracts/solidity/Foo.sol`) go through Node's
+ * package resolver, so workspace packages that expose `.sol` files via their
+ * `exports` map work the same way as a normal TypeScript import.
  *
  * ```ts
  * const lens = sol("Lens")`
  *   pragma solidity ^0.8.24;
  *   ${solFile("./contracts/IERC20.sol")}
+ *   ${solFile("@repo/contracts/solidity/IVault.sol")}
  *   contract Lens { ... }
  * `;
  * ```
