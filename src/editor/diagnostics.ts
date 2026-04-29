@@ -72,6 +72,21 @@ export function createGetSemanticDiagnostics(
     const solDiagnostics: tslib.Diagnostic[] = [];
 
     for (const literal of solLiterals) {
+      // Build-time resolver failure (e.g. solFile read error) — paint the squiggle on the offending call expression
+      if (literal.resolverError) {
+        const start = literal.resolverError.node.getStart(sourceFile);
+        const end = literal.resolverError.node.getEnd();
+        solDiagnostics.push({
+          file: sourceFile,
+          start,
+          length: Math.max(end - start, 1),
+          messageText: literal.resolverError.message,
+          category: ts.DiagnosticCategory.Error,
+          code: 90004,
+        });
+        continue;
+      }
+
       // Warn when multiple contracts share a name but have different compiled signatures
       if (literal.source != null && isDuplicateContractName(literal.contractName)) {
         solDiagnostics.push({

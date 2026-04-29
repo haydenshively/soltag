@@ -63,6 +63,42 @@ export function sol<TName extends string>(
   );
 }
 
+export interface SolFileOptions {
+  /** Skip the default leading SPDX/pragma strip. */
+  raw?: boolean;
+}
+
+/**
+ * Build-time helper for splicing the contents of a `.sol` file into a
+ * `sol("Name")\`...\`` template. The bundler plugin reads the file at build
+ * time and replaces the call with its contents (with the leading SPDX +
+ * pragma block stripped by default — set `{ raw: true }` to preserve it).
+ *
+ * Paths are resolved relative to the `.ts` file containing the call.
+ *
+ * ```ts
+ * const lens = sol("Lens")`
+ *   pragma solidity ^0.8.24;
+ *   ${solFile("./contracts/IERC20.sol")}
+ *   contract Lens { ... }
+ * `;
+ * ```
+ *
+ * For transitive imports (e.g. a contract that imports OpenZeppelin), run
+ * `forge flatten` as a codegen step in `package.json`, commit the output,
+ * and reference the flat file with `solFile`. That keeps build environments
+ * (Vercel, Netlify, etc.) free of Solidity-specific tooling.
+ *
+ * Like {@link sol}, this never executes at runtime — if it does, the plugin
+ * is missing.
+ */
+export function solFile(_path: string, _opts?: SolFileOptions): string {
+  throw new Error(
+    "soltag: solFile() was not transformed by the bundler plugin. " +
+      "Add soltag/vite (or the plugin for your bundler) to your build config.",
+  );
+}
+
 export class InlineContract<TName extends string = string> {
   private _name: TName;
   private _contract: CompiledContract;

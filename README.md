@@ -263,6 +263,57 @@ const balanceLens = sol("BalanceLens")`
 
 The bundler plugin resolves `const` string interpolations at build time, so these templates are still compiled ahead of time. Interpolations that can't be statically resolved (e.g. variables from function calls) will cause a build error — extract the dynamic part into a separate contract or make it a `const`.
 
+### Pulling in `.sol` files
+
+For interfaces and libraries that already live in `.sol` files (typically a Foundry project alongside your TS code), use `solFile` to splice their content into a lens at build time. The bundler plugin reads the file at build time and inlines its contents.
+
+```ts
+import { sol, solFile } from 'soltag';
+
+const lens = sol("VaultReader")`
+  pragma solidity ^0.8.24;
+
+  ${solFile("./contracts/IVault.sol")}
+
+  contract VaultReader {
+    function read(IVault v) external view returns (uint256) {
+      return v.totalAssets();
+    }
+  }
+`;
+```
+
+**Paths** are resolved relative to the directory of the `.ts` file containing the `solFile` call. There is no implicit `cwd` or import-search logic — the path is what gets read.
+
+**Pragmas.** By default, `solFile` strips the leading `// SPDX-License-Identifier` comment and `pragma solidity / abicoder / experimental` directives from the file. Your lens template owns the pragma at the top; helpers contribute contract bodies. Pass `{ raw: true }` to opt out.
+
+**Edits hot-reload.** `solFile` re-reads on every resolution, so editing an imported `.sol` file is picked up on the next editor poll without restarting tsserver, and the build sees the new content on the next compile.
+
+#### Transitive imports (e.g. `forge flatten`)
+
+`solFile` reads exactly one file — it does not follow `import` statements inside the `.sol` itself. For contracts with deep dependency graphs (OpenZeppelin, etc.), the recommended pattern is to flatten as a codegen step in your `package.json` and **commit the flattened output**:
+
+```json
+{
+  "scripts": {
+    "codegen:sol": "forge flatten contracts/src/Vault.sol --root contracts -o generated/Vault.flat.sol",
+    "prebuild": "pnpm codegen:sol"
+  }
+}
+```
+
+Then reference the committed flat file:
+
+```ts
+const lens = sol("VaultReader")`
+  pragma solidity ^0.8.24;
+  ${solFile("../generated/Vault.flat.sol")}
+  contract VaultReader { ... }
+`;
+```
+
+This keeps `forge` (and any other Solidity-specific tooling) out of your build environment — Vercel, Netlify, Cloudflare Pages, and CI workflows that aren't already foundry-aware don't need to install anything to build the project.
+
 ## How It Works
 
 ### Bundler plugin

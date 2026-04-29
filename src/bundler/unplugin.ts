@@ -2,7 +2,7 @@ import MagicString from "magic-string";
 import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
-import { extractTemplateSource, isSolTag } from "../ast-utils.js";
+import { extractTemplateSource, isSolTag, SolFileError } from "../ast-utils.js";
 import { compileToArtifacts } from "../solc.js";
 
 export interface SoltagPluginOptions {
@@ -40,7 +40,16 @@ export function transformSolTemplates(
     if (ts.isTaggedTemplateExpression(node)) {
       const solTag = isSolTag(ts, node.tag);
       if (solTag) {
-        const soliditySource = extractTemplateSource(ts, node.template, sourceFile);
+        let soliditySource: string | undefined;
+        try {
+          soliditySource = extractTemplateSource(ts, node.template, sourceFile);
+        } catch (err) {
+          if (err instanceof SolFileError) {
+            const { line, character } = sourceFile.getLineAndCharacterOfPosition(err.node.getStart(sourceFile));
+            throw new Error(`${id}:${line + 1}:${character + 1} — ${err.message}`);
+          }
+          throw err;
+        }
 
         if (soliditySource === undefined) {
           // Can't resolve at build time — leave for runtime

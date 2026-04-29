@@ -3,7 +3,7 @@ import * as path from "path";
 
 import ts from "typescript";
 
-import { extractTemplateSource, isSolTag } from "./ast-utils.js";
+import { extractTemplateSource, isSolTag, SolFileError } from "./ast-utils.js";
 import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "./codegen.js";
 import { compileCached, getConstructorInputs, getContractAbi, type SolcStandardOutput } from "./solc.js";
 
@@ -54,9 +54,17 @@ for (const sourceFile of program.getSourceFiles()) {
     if (ts.isTaggedTemplateExpression(node)) {
       const solTag = isSolTag(ts, node.tag);
       if (solTag !== false) {
-        const source = extractTemplateSource(ts, node.template, sourceFile);
-        if (source != null) {
-          rawEntries.push({ contractName: solTag.contractName, source });
+        try {
+          const source = extractTemplateSource(ts, node.template, sourceFile);
+          if (source != null) {
+            rawEntries.push({ contractName: solTag.contractName, source });
+          }
+        } catch (err) {
+          if (err instanceof SolFileError) {
+            console.warn(`warning: ${err.message}`);
+          } else {
+            throw err;
+          }
         }
       }
     }

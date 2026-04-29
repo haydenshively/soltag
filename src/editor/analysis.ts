@@ -1,9 +1,9 @@
 import type tslib from "typescript/lib/tsserverlibrary";
 
-import { extractTemplateSource, isSolTag } from "../ast-utils.js";
+import { extractTemplateSource, isSolTag, SolFileError } from "../ast-utils.js";
 
 export interface SolLiteralInfo {
-  /** Solidity source text, or undefined if the template has unresolvable interpolations */
+  /** Solidity source text, or undefined if the template has unresolvable interpolations or solFile failure */
   source: string | undefined;
   /** Contract name from sol("Name") factory form */
   contractName: string;
@@ -13,6 +13,8 @@ export interface SolLiteralInfo {
   end: number;
   /** The node itself */
   node: tslib.TaggedTemplateExpression;
+  /** Populated when a `solFile(...)` interpolation failed at read time */
+  resolverError?: { node: tslib.Node; message: string };
 }
 
 /**
@@ -34,12 +36,27 @@ export function findSolTemplateLiterals(ts: typeof tslib, sourceFile: tslib.Sour
     if (ts.isTaggedTemplateExpression(node)) {
       const solTag = isSolTag(ts, node.tag);
       if (solTag !== false) {
+        let source: string | undefined;
+        let resolverError: SolLiteralInfo["resolverError"];
+        try {
+          source = extractTemplateSource(ts, node.template, sourceFile as unknown as tslib.SourceFile);
+        } catch (err) {
+          if (err instanceof SolFileError) {
+            resolverError = {
+              node: err.node as unknown as tslib.Node,
+              message: err.message,
+            };
+          } else {
+            throw err;
+          }
+        }
         results.push({
-          source: extractTemplateSource(ts, node.template, sourceFile as unknown as tslib.SourceFile),
+          source,
           contractName: solTag.contractName,
           pos: node.pos,
           end: node.end,
           node,
+          resolverError,
         });
       }
     }
