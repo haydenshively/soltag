@@ -1,5 +1,5 @@
+import ts from "@typescript/typescript6";
 import MagicString from "magic-string";
-import ts from "typescript";
 import { createUnplugin } from "unplugin";
 
 import { extractTemplateSource, isSolTag, SolFileError } from "../ast-utils.js";

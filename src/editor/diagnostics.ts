@@ -1,4 +1,4 @@
-import type tslib from "typescript/lib/tsserverlibrary";
+import type tslib from "@typescript/typescript6/lib/tsserverlibrary";
 
 import { resolveStringExpression } from "../ast-utils.js";
 import { compileCached, type SolcStandardOutput } from "../solc.js";

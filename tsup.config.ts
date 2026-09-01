@@ -14,7 +14,7 @@ export default defineConfig([
     format: ['esm'],
     sourcemap: true,
     banner: { js: '#!/usr/bin/env node' },
-    external: ['solc', 'typescript'],
+    external: ['solc', '@typescript/typescript6'],
   },
   {
     entry: { plugin: 'src/editor/index.ts' },
@@ -34,6 +34,6 @@ export default defineConfig([
     shims: true,
     dts: true,
     sourcemap: true,
-    external: ['solc', 'viem', 'typescript', 'unplugin'],
+    external: ['solc', 'viem', '@typescript/typescript6', 'unplugin'],
   },
 ]);

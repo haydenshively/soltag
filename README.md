@@ -82,6 +82,20 @@ Add to your `tsconfig.json` for inline Solidity diagnostics and contract-name va
 
 > VS Code users: make sure your workspace is using the TypeScript version from `node_modules` (not the built-in one). Open a `.ts` file, click the TypeScript version in the bottom status bar, and select "Use Workspace Version".
 
+#### TypeScript 7 note
+
+soltag itself works with any installed TypeScript version, including 7 — it bundles its own TS 6 parser (`@typescript/typescript6`), so the bundler plugins and the `soltag` CLI don't depend on your project's `typescript` at all.
+
+The IDE plugin is the exception: TypeScript 7's native language service doesn't load tsserver plugins yet (planned for ≥7.1), so inline Solidity diagnostics require the editor to run a TS ≤6 tsserver. To keep the plugin in your editor while using TS 7 for `tsc` in CI, use Microsoft's side-by-side aliases:
+
+```json
+"typescript": "npm:@typescript/typescript6@^6.0.2",
+"@typescript/native": "npm:typescript@^7.0.2"
+```
+
+On TS 7 without the plugin, use the CLI below to generate `.soltag/types.d.ts` — type narrowing for `abi` / `with(...)` works as usual once the generated file is in your tsconfig — use `"include": ["src", ".soltag/**/*"]` (an explicit pattern; a bare `".soltag"` entry is silently ignored because TypeScript excludes dot-directories from wildcard matching).
+
+
 ### CLI (CI type generation)
 
 The TypeScript plugin generates `.soltag/types.d.ts` automatically in the IDE, but CI environments don't run `tsserver`. Use the CLI to generate the same file so that `tsc --noEmit` gets full type narrowing:

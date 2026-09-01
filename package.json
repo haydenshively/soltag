@@ -1,6 +1,6 @@
 {
   "name": "soltag",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Inline Solidity tagged template for TypeScript with IDE type inference",
   "license": "MIT",
   "keywords": [
@@ -71,15 +71,10 @@
   },
   "peerDependencies": {
     "solc": "^0.8.0",
-    "typescript": ">=5.0",
     "viem": "^2.0.0"
   },
-  "peerDependenciesMeta": {
-    "typescript": {
-      "optional": true
-    }
-  },
   "dependencies": {
+    "@typescript/typescript6": "^6.0.2",
     "unplugin": "^3.0.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import type tslib from "typescript/lib/tsserverlibrary";
+import type tslib from "@typescript/typescript6/lib/tsserverlibrary";
 
 import { extractTemplateSource, isSolTag, SolFileError } from "../ast-utils.js";
 
