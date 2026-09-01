@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import type tslib from "typescript/lib/tsserverlibrary";
+import type tslib from "@typescript/typescript6/lib/tsserverlibrary";
 
 import { createGetSemanticDiagnostics } from "./diagnostics.js";
 import { getTypesFilePath, regenerateTypesFile } from "./typegen.js";

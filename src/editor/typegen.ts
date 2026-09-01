@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import type tslib from "typescript/lib/tsserverlibrary";
+import type tslib from "@typescript/typescript6/lib/tsserverlibrary";
 
 import { type ContractTypeEntry, generateDeclarationContent, SOLTAG_DIR, SOLTAG_TYPES_FILE } from "../codegen.js";
 import { compileCached, getConstructorInputs, getContractAbi, type SolcStandardOutput } from "../solc.js";

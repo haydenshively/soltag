@@ -2,7 +2,7 @@ import * as fs from "fs";
 import { createRequire } from "module";
 import * as path from "path";
 
-import type typescript from "typescript";
+import type typescript from "@typescript/typescript6";
 
 type TS = typeof typescript;
 
